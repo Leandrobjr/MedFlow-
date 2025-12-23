@@ -30,6 +30,10 @@ export class CreateStaffDto {
   @IsOptional()
   crmState?: string;
 
+  @IsNumber()
+  @IsOptional()
+  commissionRate?: number;
+
   @IsString()
   @IsOptional()
   userId?: string;
