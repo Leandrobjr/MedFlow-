@@ -7,9 +7,11 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { PrismaModule } from './prisma/prisma.module';
+import { PatientsModule } from './patients/patients.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, PatientsModule, StaffModule],
   controllers: [AppController],
   providers: [
     AppService,
