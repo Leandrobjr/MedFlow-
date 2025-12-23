@@ -5,6 +5,7 @@ ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "patients" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "staff" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "appointments" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "medical_records" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Criar política de isolamento para as tabelas
 -- Esta política impede que um tenant acesse dados de outro tenant.
@@ -29,3 +30,11 @@ USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
 DROP POLICY IF EXISTS tenant_isolation_policy ON "appointments";
 CREATE POLICY tenant_isolation_policy ON "appointments"
 USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
+
+-- Política para medical_records
+DROP POLICY IF EXISTS tenant_isolation_policy ON "medical_records";
+CREATE POLICY tenant_isolation_policy ON "medical_records"
+USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
+
+-- Nota: medical_addendums herda o isolamento via medical_record, 
+-- mas podemos adicionar explicitamente se adicionarmos tenant_id nela também futuramente.

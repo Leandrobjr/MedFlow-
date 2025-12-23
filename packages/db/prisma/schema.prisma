@@ -18,10 +18,11 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users        User[]
-  patients     Patient[]
-  staff        Staff[]
-  appointments Appointment[]
+  users          User[]
+  patients       Patient[]
+  staff          Staff[]
+  appointments   Appointment[]
+  medicalRecords MedicalRecord[]
 
   @@map("tenants")
 }
@@ -59,8 +60,9 @@ model Patient {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
   appointments Appointment[]
+  medicalRecords MedicalRecord[]
 
   @@map("patients")
 }
@@ -79,9 +81,10 @@ model Staff {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  tenant         Tenant        @relation(fields: [tenantId], references: [id])
-  user           User?         @relation(fields: [userId], references: [id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  user           User?           @relation(fields: [userId], references: [id])
   appointments   Appointment[]
+  medicalRecords MedicalRecord[]
 
   @@map("staff")
 }
@@ -89,15 +92,14 @@ model Staff {
 model Appointment {
   id          String   @id @default(uuid()) @db.Uuid
   patientId   String   @map("patient_id") @db.Uuid
-  staffId     String   @map("staff_id") @db.Uuid // O médico/profissional
+  staffId     String   @map("staff_id") @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   startTime   DateTime @map("start_time")
   endTime     DateTime @map("end_time")
-  status      String   @default("scheduled") // scheduled, confirmed, cancelled, attended, no_show
-  type        String   @default("consultation") // consultation, return, procedure
+  status      String   @default("scheduled")
+  type        String   @default("consultation")
   observations String?  @db.Text
   
-  // Google Calendar Integration
   googleEventId String? @map("google_event_id")
   
   createdAt   DateTime @default(now()) @map("created_at")
@@ -106,8 +108,48 @@ model Appointment {
   patient     Patient  @relation(fields: [patientId], references: [id])
   staff       Staff    @relation(fields: [staffId], references: [id])
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  medicalRecord MedicalRecord?
 
   @@map("appointments")
   @@index([startTime, endTime])
   @@index([staffId, startTime])
+}
+
+model MedicalRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  appointmentId String   @unique @map("appointment_id") @db.Uuid
+  patientId     String   @map("patient_id") @db.Uuid
+  staffId       String   @map("staff_id") @db.Uuid // O médico que atendeu
+  tenantId      String   @map("tenant_id") @db.Uuid
+  
+  anamnesis     String?  @db.Text // Queixa principal e histórico
+  physicalExam  String?  @map("physical_exam") @db.Text
+  diagnosis     String?  @db.Text // CID e diagnóstico
+  prescription  String?  @db.Text // Prescrição médica
+  conduct       String?  @db.Text // Conduta e orientações
+  
+  isFinalized   Boolean  @default(false) @map("is_finalized")
+  finalizedAt   DateTime? @map("finalized_at")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  staff         Staff       @relation(fields: [staffId], references: [id])
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  addendums     MedicalAddendum[]
+
+  @@map("medical_records")
+}
+
+model MedicalAddendum {
+  id              String   @id @default(uuid()) @db.Uuid
+  medicalRecordId String   @map("medical_record_id") @db.Uuid
+  content         String   @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+
+  @@map("medical_addendums")
 }
