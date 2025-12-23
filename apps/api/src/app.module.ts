@@ -9,9 +9,16 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { PrismaModule } from './prisma/prisma.module';
 import { PatientsModule } from './patients/patients.module';
 import { StaffModule } from './staff/staff.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, PatientsModule, StaffModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    PatientsModule,
+    StaffModule,
+    AppointmentsModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
