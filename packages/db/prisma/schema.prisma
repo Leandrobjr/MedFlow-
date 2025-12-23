@@ -23,6 +23,8 @@ model Tenant {
   staff          Staff[]
   appointments   Appointment[]
   medicalRecords MedicalRecord[]
+  transactions   Transaction[]
+  dailyClosures  DailyClosure[]
 
   @@map("tenants")
 }
@@ -63,6 +65,7 @@ model Patient {
   tenant       Tenant          @relation(fields: [tenantId], references: [id])
   appointments Appointment[]
   medicalRecords MedicalRecord[]
+  transactions Transaction[]
 
   @@map("patients")
 }
@@ -85,6 +88,8 @@ model Staff {
   user           User?           @relation(fields: [userId], references: [id])
   appointments   Appointment[]
   medicalRecords MedicalRecord[]
+  transactions   Transaction[]
+  closedCaixas   DailyClosure[]
 
   @@map("staff")
 }
@@ -109,6 +114,7 @@ model Appointment {
   staff       Staff    @relation(fields: [staffId], references: [id])
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   medicalRecord MedicalRecord?
+  transaction   Transaction?
 
   @@map("appointments")
   @@index([startTime, endTime])
@@ -119,14 +125,14 @@ model MedicalRecord {
   id            String   @id @default(uuid()) @db.Uuid
   appointmentId String   @unique @map("appointment_id") @db.Uuid
   patientId     String   @map("patient_id") @db.Uuid
-  staffId       String   @map("staff_id") @db.Uuid // O médico que atendeu
+  staffId       String   @map("staff_id") @db.Uuid
   tenantId      String   @map("tenant_id") @db.Uuid
   
-  anamnesis     String?  @db.Text // Queixa principal e histórico
+  anamnesis     String?  @db.Text
   physicalExam  String?  @map("physical_exam") @db.Text
-  diagnosis     String?  @db.Text // CID e diagnóstico
-  prescription  String?  @db.Text // Prescrição médica
-  conduct       String?  @db.Text // Conduta e orientações
+  diagnosis     String?  @db.Text
+  prescription  String?  @db.Text
+  conduct       String?  @db.Text
   
   isFinalized   Boolean  @default(false) @map("is_finalized")
   finalizedAt   DateTime? @map("finalized_at")
@@ -152,4 +158,52 @@ model MedicalAddendum {
   medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
 
   @@map("medical_addendums")
+}
+
+model Transaction {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  patientId     String?  @map("patient_id") @db.Uuid // Se for pagamento de consulta
+  staffId       String?  @map("staff_id") @db.Uuid // Médico do repasse (opcional aqui)
+  appointmentId String?  @unique @map("appointment_id") @db.Uuid
+  
+  type          String   // income (entrada), expense (saída)
+  category      String   // consultation, procedure, office_supply, etc
+  amount        Decimal  @db.Decimal(10, 2)
+  method        String?  // cash, credit_card, debit_card, pix
+  description   String?
+  status        String   @default("completed") // completed, pending, cancelled
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  patient       Patient?    @relation(fields: [patientId], references: [id])
+  staff         Staff?      @relation(fields: [staffId], references: [id])
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@map("transactions")
+}
+
+model DailyClosure {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  closedById      String   @map("closed_by_id") @db.Uuid // Quem fechou o caixa
+  
+  date            DateTime @db.Date // Dia referente ao caixa
+  totalIncome     Decimal  @map("total_income") @db.Decimal(10, 2)
+  totalExpense    Decimal  @map("total_expense") @db.Decimal(10, 2)
+  netBalance      Decimal  @map("net_balance") @db.Decimal(10, 2)
+  
+  observations    String?  @db.Text
+  status          String   @default("closed") // closed
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  closedBy        Staff    @relation(fields: [closedById], references: [id])
+
+  @@unique([tenantId, date])
+  @@map("daily_closures")
 }
