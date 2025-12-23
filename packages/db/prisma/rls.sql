@@ -8,12 +8,12 @@ ALTER TABLE "appointments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "medical_records" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "transactions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "daily_closures" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "medical_fees" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Criar política de isolamento para as tabelas
 -- Esta política impede que um tenant acesse dados de outro tenant.
 -- A variável 'medflow.current_tenant' deve ser setada em cada requisição.
 
--- Função genérica não é possível no Postgres sem extensão, então repetimos por tabela
 -- Política para users
 DROP POLICY IF EXISTS tenant_isolation_policy ON "users";
 CREATE POLICY tenant_isolation_policy ON "users"
@@ -47,4 +47,9 @@ USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
 -- Política para daily_closures
 DROP POLICY IF EXISTS tenant_isolation_policy ON "daily_closures";
 CREATE POLICY tenant_isolation_policy ON "daily_closures"
+USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
+
+-- Política para medical_fees
+DROP POLICY IF EXISTS tenant_isolation_policy ON "medical_fees";
+CREATE POLICY tenant_isolation_policy ON "medical_fees"
 USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
