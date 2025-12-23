@@ -11,6 +11,7 @@ import { PatientsModule } from './patients/patients.module';
 import { StaffModule } from './staff/staff.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { PepModule } from './pep/pep.module';
+import { FinanceModule } from './finance/finance.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PepModule } from './pep/pep.module';
     StaffModule,
     AppointmentsModule,
     PepModule,
+    FinanceModule,
   ],
   controllers: [AppController],
   providers: [
