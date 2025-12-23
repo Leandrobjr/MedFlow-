@@ -20,7 +20,7 @@ export class FinanceService {
       throw new BadRequestException('O caixa deste dia já foi fechado. Não é possível realizar novas transações.');
     }
 
-    return this.prisma.client.transaction.create({
+    const transaction = await this.prisma.client.transaction.create({
       data: {
         ...dto,
         tenantId,
@@ -30,6 +30,75 @@ export class FinanceService {
         appointment: true,
       },
     });
+
+    // Lógica de Repasse Médico (M1-07)
+    // Se for uma entrada de consulta e tiver um médico vinculado
+    if (dto.type === TransactionType.INCOME && dto.staffId) {
+      const doctor = await this.prisma.client.staff.findUnique({
+        where: { id: dto.staffId },
+      });
+
+      if (doctor && doctor.commissionRate && Number(doctor.commissionRate) > 0) {
+        const commissionRate = Number(doctor.commissionRate);
+        const grossAmount = Number(dto.amount);
+        const feeAmount = (grossAmount * commissionRate) / 100;
+
+        await this.prisma.client.medicalFee.create({
+          data: {
+            tenantId,
+            staffId: dto.staffId,
+            transactionId: transaction.id,
+            grossAmount,
+            commissionRate,
+            feeAmount,
+            status: 'pending',
+          },
+        });
+      }
+    }
+
+    return transaction;
+  }
+
+  async getMedicalFees(tenantId: string, doctorId?: string, startDate?: string, endDate?: string) {
+    const where: any = { tenantId };
+    
+    if (doctorId) {
+      where.staffId = doctorId;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    return this.prisma.client.medicalFee.findMany({
+      where,
+      include: {
+        staff: { select: { name: true, specialty: true } },
+        transaction: { select: { description: true, amount: true, createdAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getMedicalFeeSummary(tenantId: string, doctorId: string) {
+    const fees = await this.prisma.client.medicalFee.findMany({
+      where: {
+        tenantId,
+        staffId: doctorId,
+        status: 'pending',
+      },
+    });
+
+    const totalPending = fees.reduce((acc, fee) => acc + Number(fee.feeAmount), 0);
+
+    return {
+      doctorId,
+      pendingFeesCount: fees.length,
+      totalPendingAmount: totalPending,
+    };
   }
 
   async getDailyTransactions(tenantId: string, date?: string) {
