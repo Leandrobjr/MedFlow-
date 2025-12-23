@@ -19,6 +19,8 @@ model Tenant {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   users     User[]
+  patients  Patient[]
+  staff     Staff[]
 
   @@map("tenants")
 }
@@ -35,7 +37,48 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  staffProfile Staff?
 
   @@map("users")
 }
 
+model Patient {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  cpf         String   @unique
+  email       String?
+  phone       String
+  birthDate   DateTime @map("birth_date")
+  gender      String?
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?  @map("zip_code")
+  tenantId    String   @map("tenant_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("patients")
+}
+
+model Staff {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String?  @unique @map("user_id") @db.Uuid
+  name           String
+  email          String?
+  phone          String?
+  role           String   // doctor, receptionist, admin, manager
+  specialty      String?  // Apenas para médicos
+  crm            String?  // Apenas para médicos
+  crmState       String?  @map("crm_state")
+  tenantId       String   @map("tenant_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  user           User?    @relation(fields: [userId], references: [id])
+
+  @@map("staff")
+}
