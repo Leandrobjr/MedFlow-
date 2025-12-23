@@ -6,7 +6,9 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "db:generate": "pnpm --filter @medflow/db prisma:generate",
+    "db:migrate": "pnpm --filter @medflow/db prisma:migrate"
   },
   "devDependencies": {
     "turbo": "^2.3.0",
