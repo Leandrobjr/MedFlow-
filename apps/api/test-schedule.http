@@ -1,0 +1,131 @@
+### Testes de Schedule API
+### Requer autenticação - fazer login primeiro
+
+@baseUrl = http://localhost:3001
+@token = 
+
+### 1. Login para obter token
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@medflow.local",
+  "password": "admin123"
+}
+
+### 2. Listar profissionais (para obter staffId)
+GET {{baseUrl}}/staff
+Cookie: access_token={{token}}
+
+### 3. Criar configuração de agenda
+POST {{baseUrl}}/schedule/config
+Content-Type: application/json
+Cookie: access_token={{token}}
+
+{
+  "staffId": "STAFF_ID_AQUI",
+  "defaultDuration": 30,
+  "weeklySchedule": {
+    "monday": {
+      "enabled": true,
+      "periods": [
+        { "start": "08:00", "end": "12:00" },
+        { "start": "14:00", "end": "18:00" }
+      ]
+    },
+    "tuesday": {
+      "enabled": true,
+      "periods": [
+        { "start": "08:00", "end": "12:00" }
+      ]
+    },
+    "wednesday": {
+      "enabled": true,
+      "periods": [
+        { "start": "08:00", "end": "12:00" },
+        { "start": "14:00", "end": "18:00" }
+      ]
+    },
+    "thursday": {
+      "enabled": true,
+      "periods": [
+        { "start": "08:00", "end": "12:00" }
+      ]
+    },
+    "friday": {
+      "enabled": true,
+      "periods": [
+        { "start": "08:00", "end": "12:00" },
+        { "start": "14:00", "end": "18:00" }
+      ]
+    },
+    "saturday": {
+      "enabled": false
+    },
+    "sunday": {
+      "enabled": false
+    }
+  },
+  "isActive": true
+}
+
+### 4. Buscar configuração por profissional
+GET {{baseUrl}}/schedule/config/staff/STAFF_ID_AQUI
+Cookie: access_token={{token}}
+
+### 5. Atualizar configuração
+PATCH {{baseUrl}}/schedule/config/staff/STAFF_ID_AQUI
+Content-Type: application/json
+Cookie: access_token={{token}}
+
+{
+  "defaultDuration": 45,
+  "isActive": true
+}
+
+### 6. Criar bloqueio de agenda (dia inteiro)
+POST {{baseUrl}}/schedule/blocks
+Content-Type: application/json
+Cookie: access_token={{token}}
+
+{
+  "staffId": "STAFF_ID_AQUI",
+  "blockType": "date",
+  "startDate": "2025-01-15",
+  "reason": "Feriado",
+  "isRecurring": false
+}
+
+### 7. Criar bloqueio de agenda (período)
+POST {{baseUrl}}/schedule/blocks
+Content-Type: application/json
+Cookie: access_token={{token}}
+
+{
+  "staffId": "STAFF_ID_AQUI",
+  "blockType": "period",
+  "startDate": "2025-01-20",
+  "endDate": "2025-01-20",
+  "startTime": "14:00",
+  "endTime": "16:00",
+  "reason": "Reunião",
+  "isRecurring": false
+}
+
+### 8. Listar bloqueios por profissional
+GET {{baseUrl}}/schedule/blocks/staff/STAFF_ID_AQUI?startDate=2025-01-01&endDate=2025-01-31
+Cookie: access_token={{token}}
+
+### 9. Atualizar bloqueio
+PATCH {{baseUrl}}/schedule/blocks/BLOCK_ID_AQUI
+Content-Type: application/json
+Cookie: access_token={{token}}
+
+{
+  "reason": "Reunião atualizada"
+}
+
+### 10. Deletar bloqueio
+DELETE {{baseUrl}}/schedule/blocks/BLOCK_ID_AQUI
+Cookie: access_token={{token}}
+

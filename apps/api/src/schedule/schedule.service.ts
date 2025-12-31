@@ -27,7 +27,7 @@ export class ScheduleService {
       throw new BadRequestException('Já existe uma configuração de agenda para este profissional');
     }
 
-    return this.prisma.client.scheduleConfig.create({
+    const created = await this.prisma.client.scheduleConfig.create({
       data: {
         staffId: dto.staffId,
         tenantId,
@@ -39,6 +39,12 @@ export class ScheduleService {
         staff: { select: { id: true, name: true, specialty: true } },
       },
     });
+
+    // Parsear weeklySchedule para retornar como objeto
+    return {
+      ...created,
+      weeklySchedule: dto.weeklySchedule,
+    };
   }
 
   async getConfigByStaff(tenantId: string, staffId: string) {
@@ -53,9 +59,20 @@ export class ScheduleService {
       return null;
     }
 
+    // Parsear weeklySchedule se for string
+    let weeklySchedule = config.weeklySchedule;
+    if (typeof weeklySchedule === 'string') {
+      try {
+        weeklySchedule = JSON.parse(weeklySchedule);
+      } catch (e) {
+        // Se falhar, retornar objeto vazio
+        weeklySchedule = {};
+      }
+    }
+
     return {
       ...config,
-      weeklySchedule: JSON.parse(config.weeklySchedule),
+      weeklySchedule,
     };
   }
 
@@ -73,13 +90,28 @@ export class ScheduleService {
     if (dto.weeklySchedule !== undefined) updateData.weeklySchedule = JSON.stringify(dto.weeklySchedule);
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    return this.prisma.client.scheduleConfig.update({
+    const updated = await this.prisma.client.scheduleConfig.update({
       where: { id: existing.id },
       data: updateData,
       include: {
         staff: { select: { id: true, name: true, specialty: true } },
       },
     });
+
+    // Parsear weeklySchedule se for string
+    let weeklySchedule = updated.weeklySchedule;
+    if (typeof weeklySchedule === 'string') {
+      try {
+        weeklySchedule = JSON.parse(weeklySchedule);
+      } catch (e) {
+        weeklySchedule = {};
+      }
+    }
+
+    return {
+      ...updated,
+      weeklySchedule,
+    };
   }
 
   // ========== Schedule Blocks ==========
