@@ -12,6 +12,7 @@ import { StaffModule } from './staff/staff.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { PepModule } from './pep/pep.module';
 import { FinanceModule } from './finance/finance.module';
+import { ScheduleModule } from './schedule/schedule.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FinanceModule } from './finance/finance.module';
     AppointmentsModule,
     PepModule,
     FinanceModule,
+    ScheduleModule,
   ],
   controllers: [AppController],
   providers: [
