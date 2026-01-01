@@ -5,10 +5,22 @@ import { useAuth } from '@/hooks/use-auth';
 import { LogIn, Mail, Lock, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Não renderizar até que o auth termine de carregar
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

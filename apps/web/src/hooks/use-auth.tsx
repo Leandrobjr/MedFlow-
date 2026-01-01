@@ -54,15 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
     
-    // Apenas verificar uma vez ao montar o componente
-    let mounted = true;
-    checkUser().then(() => {
-      if (!mounted) return;
-    });
-    
-    return () => {
-      mounted = false;
-    };
+    checkUser();
   }, []);
 
   const login = async (email: string, password: string) => {
