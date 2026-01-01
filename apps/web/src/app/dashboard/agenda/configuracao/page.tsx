@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { staffService, Staff } from '@/services/data-service';
-import { scheduleService, ScheduleConfig } from '@/services/schedule-service';
-import { Settings, Loader2, Save, ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
+import { scheduleService, ScheduleConfig, DayPeriod } from '@/services/schedule-service';
+import { Settings, Loader2, Save, ArrowLeft, CheckCircle2, Clock, Plus, Trash2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
@@ -16,6 +16,8 @@ const DAYS_OF_WEEK = [
   { key: 'saturday', label: 'Sábado' },
   { key: 'sunday', label: 'Domingo' },
 ] as const;
+
+type DayKey = typeof DAYS_OF_WEEK[number]['key'];
 
 export default function ConfiguracaoAgendaPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -37,12 +39,21 @@ export default function ConfiguracaoAgendaPage() {
     sunday: false,
   });
 
+  // Períodos por dia
+  const [periods, setPeriods] = useState<Record<DayKey, DayPeriod[]>>({
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: [],
+  });
+
   const fetchStaff = async () => {
     setLoading(true);
     try {
-      // Buscar apenas profissionais de saúde (médicos, fisioterapeutas, etc)
       const data = await staffService.getAll();
-      // Filtrar apenas profissionais que podem ter agenda
       const healthProfessionals = data.filter(s => 
         ['DOCTOR', 'PHYSIOTHERAPIST', 'NUTRITIONIST', 'PSYCHOLOGIST', 'DENTIST', 'SPEECH_THERAPIST'].includes(s.role)
       );
@@ -70,8 +81,19 @@ export default function ConfiguracaoAgendaPage() {
           saturday: config.weeklySchedule?.saturday?.enabled || false,
           sunday: config.weeklySchedule?.sunday?.enabled || false,
         });
+
+        // Carregar períodos
+        const loadedPeriods: Record<DayKey, DayPeriod[]> = {
+          monday: config.weeklySchedule?.monday?.periods || [],
+          tuesday: config.weeklySchedule?.tuesday?.periods || [],
+          wednesday: config.weeklySchedule?.wednesday?.periods || [],
+          thursday: config.weeklySchedule?.thursday?.periods || [],
+          friday: config.weeklySchedule?.friday?.periods || [],
+          saturday: config.weeklySchedule?.saturday?.periods || [],
+          sunday: config.weeklySchedule?.sunday?.periods || [],
+        };
+        setPeriods(loadedPeriods);
       } else {
-        // Se não existe configuração, resetar para valores padrão
         setCurrentConfig(null);
         setFormData({
           defaultDuration: 30,
@@ -83,12 +105,20 @@ export default function ConfiguracaoAgendaPage() {
           saturday: false,
           sunday: false,
         });
+        setPeriods({
+          monday: [],
+          tuesday: [],
+          wednesday: [],
+          thursday: [],
+          friday: [],
+          saturday: [],
+          sunday: [],
+        });
       }
     } catch (error: any) {
       if (error.response?.status !== 404) {
         toast.error('Erro ao carregar configuração');
       } else {
-        // Configuração não existe ainda, usar valores padrão
         setCurrentConfig(null);
       }
     } finally {
@@ -115,8 +145,100 @@ export default function ConfiguracaoAgendaPage() {
         saturday: false,
         sunday: false,
       });
+      setPeriods({
+        monday: [],
+        tuesday: [],
+        wednesday: [],
+        thursday: [],
+        friday: [],
+        saturday: [],
+        sunday: [],
+      });
     }
   }, [selectedStaffId]);
+
+  // Validar se dois períodos se sobrepõem
+  const periodsOverlap = (period1: DayPeriod, period2: DayPeriod): boolean => {
+    const timeToMinutes = (time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const start1 = timeToMinutes(period1.start);
+    const end1 = timeToMinutes(period1.end);
+    const start2 = timeToMinutes(period2.start);
+    const end2 = timeToMinutes(period2.end);
+
+    return !(end1 <= start2 || end2 <= start1);
+  };
+
+  // Validar um período individual
+  const validatePeriod = (period: DayPeriod): string | null => {
+    const timeToMinutes = (time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const start = timeToMinutes(period.start);
+    const end = timeToMinutes(period.end);
+
+    if (start >= end) {
+      return 'Horário de início deve ser anterior ao horário de término';
+    }
+
+    return null;
+  };
+
+  const addPeriod = (day: DayKey) => {
+    const newPeriod: DayPeriod = { start: '08:00', end: '12:00' };
+    setPeriods({
+      ...periods,
+      [day]: [...periods[day], newPeriod],
+    });
+  };
+
+  const removePeriod = (day: DayKey, index: number) => {
+    setPeriods({
+      ...periods,
+      [day]: periods[day].filter((_, i) => i !== index),
+    });
+  };
+
+  const updatePeriod = (day: DayKey, index: number, field: 'start' | 'end', value: string) => {
+    const updated = [...periods[day]];
+    updated[index] = { ...updated[index], [field]: value };
+    setPeriods({
+      ...periods,
+      [day]: updated,
+    });
+  };
+
+  const validateAllPeriods = (): boolean => {
+    for (const day of DAYS_OF_WEEK) {
+      const dayKey = day.key as DayKey;
+      if (formData[dayKey] && periods[dayKey].length > 0) {
+        // Validar cada período individual
+        for (const period of periods[dayKey]) {
+          const error = validatePeriod(period);
+          if (error) {
+            toast.error(`${day.label}: ${error}`);
+            return false;
+          }
+        }
+
+        // Validar sobreposições
+        for (let i = 0; i < periods[dayKey].length; i++) {
+          for (let j = i + 1; j < periods[dayKey].length; j++) {
+            if (periodsOverlap(periods[dayKey][i], periods[dayKey][j])) {
+              toast.error(`${day.label}: Períodos não podem se sobrepor`);
+              return false;
+            }
+          }
+        }
+      }
+    }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,21 +259,54 @@ export default function ConfiguracaoAgendaPage() {
       return;
     }
 
+    // Validar que dias habilitados tenham pelo menos um período
+    for (const day of DAYS_OF_WEEK) {
+      const dayKey = day.key as DayKey;
+      if (formData[dayKey] && periods[dayKey].length === 0) {
+        toast.error(`${day.label}: Adicione pelo menos um período de disponibilidade`);
+        return;
+      }
+    }
+
+    if (!validateAllPeriods()) {
+      return;
+    }
+
     setSaving(true);
     try {
-      // Montar weeklySchedule no formato esperado pelo backend
+      // Montar weeklySchedule com períodos
       const weeklySchedule = {
-        monday: { enabled: formData.monday, periods: [] },
-        tuesday: { enabled: formData.tuesday, periods: [] },
-        wednesday: { enabled: formData.wednesday, periods: [] },
-        thursday: { enabled: formData.thursday, periods: [] },
-        friday: { enabled: formData.friday, periods: [] },
-        saturday: { enabled: formData.saturday, periods: [] },
-        sunday: { enabled: formData.sunday, periods: [] },
+        monday: {
+          enabled: formData.monday,
+          periods: formData.monday ? periods.monday : [],
+        },
+        tuesday: {
+          enabled: formData.tuesday,
+          periods: formData.tuesday ? periods.tuesday : [],
+        },
+        wednesday: {
+          enabled: formData.wednesday,
+          periods: formData.wednesday ? periods.wednesday : [],
+        },
+        thursday: {
+          enabled: formData.thursday,
+          periods: formData.thursday ? periods.thursday : [],
+        },
+        friday: {
+          enabled: formData.friday,
+          periods: formData.friday ? periods.friday : [],
+        },
+        saturday: {
+          enabled: formData.saturday,
+          periods: formData.saturday ? periods.saturday : [],
+        },
+        sunday: {
+          enabled: formData.sunday,
+          periods: formData.sunday ? periods.sunday : [],
+        },
       };
 
       if (currentConfig) {
-        // Atualizar configuração existente
         await scheduleService.updateConfig(selectedStaffId, {
           defaultDuration: formData.defaultDuration,
           weeklySchedule,
@@ -159,7 +314,6 @@ export default function ConfiguracaoAgendaPage() {
         });
         toast.success('Configuração atualizada com sucesso!');
       } else {
-        // Criar nova configuração
         await scheduleService.createConfig({
           staffId: selectedStaffId,
           defaultDuration: formData.defaultDuration,
@@ -169,7 +323,6 @@ export default function ConfiguracaoAgendaPage() {
         toast.success('Configuração criada com sucesso!');
       }
 
-      // Recarregar configuração
       await fetchConfig(selectedStaffId);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao salvar configuração');
@@ -178,10 +331,8 @@ export default function ConfiguracaoAgendaPage() {
     }
   };
 
-  const selectedStaff = staff.find(s => s.id === selectedStaffId);
-
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <Link
@@ -203,9 +354,9 @@ export default function ConfiguracaoAgendaPage() {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
         {/* Seleção de Profissional */}
-        <div className="mb-6">
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Profissional <span className="text-red-500">*</span>
           </label>
@@ -240,7 +391,7 @@ export default function ConfiguracaoAgendaPage() {
             ) : (
               <>
                 {/* Duração Padrão */}
-                <div className="mb-6">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Clock className="h-4 w-4 inline mr-1" />
                     Duração Padrão das Consultas (minutos) <span className="text-red-500">*</span>
@@ -258,48 +409,107 @@ export default function ConfiguracaoAgendaPage() {
                   <p className="mt-1 text-xs text-gray-500">Mínimo: 5 minutos | Máximo: 240 minutos</p>
                 </div>
 
-                {/* Dias da Semana */}
-                <div className="mb-6">
+                {/* Dias da Semana com Períodos */}
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Dias de Atendimento <span className="text-red-500">*</span>
+                    Dias de Atendimento e Períodos de Disponibilidade <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {DAYS_OF_WEEK.map((day) => (
-                      <label
-                        key={day.key}
-                        className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData[day.key as keyof typeof formData] as boolean}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              [day.key]: e.target.checked,
-                            })
-                          }
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-3 text-sm text-gray-700">{day.label}</span>
-                      </label>
-                    ))}
+                  <div className="space-y-4">
+                    {DAYS_OF_WEEK.map((day) => {
+                      const dayKey = day.key as DayKey;
+                      const isEnabled = formData[dayKey];
+                      const dayPeriods = periods[dayKey];
+
+                      return (
+                        <div
+                          key={day.key}
+                          className={`border rounded-lg p-4 transition-colors ${
+                            isEnabled ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isEnabled}
+                                onChange={(e) => {
+                                  setFormData({
+                                    ...formData,
+                                    [dayKey]: e.target.checked,
+                                  });
+                                  // Se desmarcar, limpar períodos
+                                  if (!e.target.checked) {
+                                    setPeriods({
+                                      ...periods,
+                                      [dayKey]: [],
+                                    });
+                                  }
+                                }}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                              <span className="ml-3 text-sm font-medium text-gray-700">{day.label}</span>
+                            </label>
+                            {isEnabled && (
+                              <button
+                                type="button"
+                                onClick={() => addPeriod(dayKey)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Adicionar Período
+                              </button>
+                            )}
+                          </div>
+
+                          {isEnabled && (
+                            <div className="space-y-2 mt-3">
+                              {dayPeriods.length === 0 ? (
+                                <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                                  <p className="text-xs text-yellow-800">
+                                    Adicione pelo menos um período de disponibilidade para este dia
+                                  </p>
+                                </div>
+                              ) : (
+                                dayPeriods.map((period, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg"
+                                  >
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <label className="text-xs text-gray-600">De:</label>
+                                      <input
+                                        type="time"
+                                        value={period.start}
+                                        onChange={(e) => updatePeriod(dayKey, index, 'start', e.target.value)}
+                                        className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                      <label className="text-xs text-gray-600">Até:</label>
+                                      <input
+                                        type="time"
+                                        value={period.end}
+                                        onChange={(e) => updatePeriod(dayKey, index, 'end', e.target.value)}
+                                        className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => removePeriod(dayKey, index)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Remover período"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-
-                {/* Info sobre períodos */}
-                {currentConfig && (
-                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-blue-900">Configuração existente</p>
-                        <p className="text-xs text-blue-700 mt-1">
-                          Esta configuração já existe. Você pode atualizá-la ou adicionar períodos de disponibilidade na próxima etapa.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Botão Salvar */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
