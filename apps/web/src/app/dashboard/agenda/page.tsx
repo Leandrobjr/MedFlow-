@@ -335,20 +335,6 @@ export default function AgendaPage() {
   const renderDayView = () => {
     const dayAppointments = getAppointmentsForDate(selectedDate);
     
-    // Debug temporário
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Agenda Diária] Debug:', {
-        selectedDate: format(selectedDate, 'yyyy-MM-dd'),
-        totalAppointments: appointments.length,
-        dayAppointmentsCount: dayAppointments.length,
-        appointmentsDates: appointments.map(apt => ({
-          patient: apt.patient.name,
-          date: format(new Date(apt.startTime), 'yyyy-MM-dd'),
-          time: format(new Date(apt.startTime), 'HH:mm'),
-        })),
-      });
-    }
-    
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
