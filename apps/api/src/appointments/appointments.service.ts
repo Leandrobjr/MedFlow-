@@ -59,10 +59,11 @@ export class AppointmentsService {
 
     // Prioridade: date > (startDate + endDate)
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Garantir que a data seja interpretada como local (não UTC)
+      // Se date vem como "yyyy-MM-dd", criar data local corretamente
+      const [year, month, day] = date.split('-').map(Number);
+      const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+      const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
       
       where.startTime = {
         gte: startOfDay,

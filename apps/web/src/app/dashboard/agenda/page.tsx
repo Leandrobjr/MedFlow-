@@ -201,10 +201,15 @@ export default function AgendaPage() {
 
   const getAppointmentsForDate = (date: Date): Appointment[] => {
     // Filtrar agendamentos do array já carregado (que pode estar filtrado por profissional)
-    return appointments.filter(apt => {
+    const filtered = appointments.filter(apt => {
       const aptDate = new Date(apt.startTime);
-      return isSameDay(aptDate, date);
+      // Normalizar ambas as datas para comparar apenas dia/mês/ano (ignorar hora)
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const aptDateStr = format(aptDate, 'yyyy-MM-dd');
+      return dateStr === aptDateStr;
     });
+    
+    return filtered;
   };
 
   const navigateDate = (direction: 'prev' | 'next') => {
@@ -225,6 +230,20 @@ export default function AgendaPage() {
   const renderDayView = () => {
     const dayAppointments = getAppointmentsForDate(selectedDate);
     
+    // Debug temporário
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Agenda Diária] Debug:', {
+        selectedDate: format(selectedDate, 'yyyy-MM-dd'),
+        totalAppointments: appointments.length,
+        dayAppointmentsCount: dayAppointments.length,
+        appointmentsDates: appointments.map(apt => ({
+          patient: apt.patient.name,
+          date: format(new Date(apt.startTime), 'yyyy-MM-dd'),
+          time: format(new Date(apt.startTime), 'HH:mm'),
+        })),
+      });
+    }
+    
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
@@ -237,6 +256,11 @@ export default function AgendaPage() {
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
             <p className="text-lg font-medium text-gray-500">Nenhuma consulta para este dia</p>
             <p className="text-sm">Clique em "Novo Agendamento" para começar.</p>
+            {appointments.length > 0 && (
+              <p className="text-xs text-gray-400 mt-2">
+                Total carregado: {appointments.length} | Data: {format(selectedDate, 'dd/MM/yyyy')}
+              </p>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
