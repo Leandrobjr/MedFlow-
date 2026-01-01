@@ -36,6 +36,7 @@ export default function AgendaPage() {
       const params: any = {};
       
       if (view === 'day') {
+        // Para visualização diária, usar date (backend já filtra por dia)
         params.date = format(selectedDate, 'yyyy-MM-dd');
       } else if (view === 'week') {
         const weekStart = startOfWeek(selectedDate, { locale: ptBR });
@@ -49,14 +50,17 @@ export default function AgendaPage() {
         params.endDate = format(monthEnd, 'yyyy-MM-dd');
       }
       
-      if (selectedStaffId) {
+      // Apenas adicionar doctorId se um profissional específico foi selecionado
+      if (selectedStaffId && selectedStaffId.trim() !== '') {
         params.doctorId = selectedStaffId;
       }
       
       const data = await appointmentService.getAll(params);
-      setAppointments(data);
+      setAppointments(data || []);
     } catch (error) {
+      console.error('Erro ao carregar agenda:', error);
       toast.error('Erro ao carregar agenda');
+      setAppointments([]);
     } finally {
       setLoading(false);
     }
@@ -196,6 +200,7 @@ export default function AgendaPage() {
   };
 
   const getAppointmentsForDate = (date: Date): Appointment[] => {
+    // Filtrar agendamentos do array já carregado (que pode estar filtrado por profissional)
     return appointments.filter(apt => {
       const aptDate = new Date(apt.startTime);
       return isSameDay(aptDate, date);
@@ -380,7 +385,7 @@ export default function AgendaPage() {
                             <div
                               key={apt.id}
                               className="mb-1 p-2 bg-blue-50 border border-blue-200 rounded text-xs cursor-pointer hover:bg-blue-100 transition-colors"
-                              title={`${apt.patient.name} - ${format(new Date(apt.startTime), 'HH:mm')}`}
+                              title={`${apt.patient.name} - ${format(new Date(apt.startTime), 'HH:mm')} | Dr(a). ${apt.doctor?.name || apt.staff?.name || 'N/A'}`}
                             >
                               <div className="font-semibold text-blue-900 truncate">
                                 {apt.patient.name}
@@ -458,7 +463,7 @@ export default function AgendaPage() {
                         <div
                           key={apt.id}
                           className="text-[10px] p-1 bg-blue-100 text-blue-900 rounded truncate"
-                          title={`${apt.patient.name} - ${format(new Date(apt.startTime), 'HH:mm')}`}
+                          title={`${apt.patient.name} - ${format(new Date(apt.startTime), 'HH:mm')} | Dr(a). ${apt.doctor?.name || apt.staff?.name || 'N/A'}`}
                         >
                           {format(new Date(apt.startTime), 'HH:mm')} - {apt.patient.name}
                         </div>

@@ -310,36 +310,51 @@ export default function ConfiguracaoAgendaPage() {
 
     setSaving(true);
     try {
-      const weeklySchedule = {
-        monday: {
-          enabled: formData.monday,
-          periods: formData.monday ? periods.monday : [],
-        },
-        tuesday: {
-          enabled: formData.tuesday,
-          periods: formData.tuesday ? periods.tuesday : [],
-        },
-        wednesday: {
-          enabled: formData.wednesday,
-          periods: formData.wednesday ? periods.wednesday : [],
-        },
-        thursday: {
-          enabled: formData.thursday,
-          periods: formData.thursday ? periods.thursday : [],
-        },
-        friday: {
-          enabled: formData.friday,
-          periods: formData.friday ? periods.friday : [],
-        },
-        saturday: {
-          enabled: formData.saturday,
-          periods: formData.saturday ? periods.saturday : [],
-        },
-        sunday: {
-          enabled: formData.sunday,
-          periods: formData.sunday ? periods.sunday : [],
-        },
-      };
+      // Montar weeklySchedule - apenas incluir dias habilitados com períodos
+      const weeklySchedule: any = {};
+      
+      if (formData.monday) {
+        weeklySchedule.monday = {
+          enabled: true,
+          periods: periods.monday.length > 0 ? periods.monday : [],
+        };
+      }
+      if (formData.tuesday) {
+        weeklySchedule.tuesday = {
+          enabled: true,
+          periods: periods.tuesday.length > 0 ? periods.tuesday : [],
+        };
+      }
+      if (formData.wednesday) {
+        weeklySchedule.wednesday = {
+          enabled: true,
+          periods: periods.wednesday.length > 0 ? periods.wednesday : [],
+        };
+      }
+      if (formData.thursday) {
+        weeklySchedule.thursday = {
+          enabled: true,
+          periods: periods.thursday.length > 0 ? periods.thursday : [],
+        };
+      }
+      if (formData.friday) {
+        weeklySchedule.friday = {
+          enabled: true,
+          periods: periods.friday.length > 0 ? periods.friday : [],
+        };
+      }
+      if (formData.saturday) {
+        weeklySchedule.saturday = {
+          enabled: true,
+          periods: periods.saturday.length > 0 ? periods.saturday : [],
+        };
+      }
+      if (formData.sunday) {
+        weeklySchedule.sunday = {
+          enabled: true,
+          periods: periods.sunday.length > 0 ? periods.sunday : [],
+        };
+      }
 
       if (currentConfig) {
         await scheduleService.updateConfig(selectedStaffId, {
