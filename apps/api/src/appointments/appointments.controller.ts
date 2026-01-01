@@ -12,7 +12,7 @@ import {
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../common/shared-types';
 
 @Controller('appointments')
 export class AppointmentsController {
@@ -29,8 +29,10 @@ export class AppointmentsController {
     @Req() req: any,
     @Query('doctorId') doctorId?: string,
     @Query('date') date?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.appointmentsService.findAll(req.tenantId, doctorId, date);
+    return this.appointmentsService.findAll(req.tenantId, doctorId, date, startDate, endDate);
   }
 
   @Get(':id')
@@ -54,4 +56,5 @@ export class AppointmentsController {
     return this.appointmentsService.remove(req.tenantId, id);
   }
 }
+
 

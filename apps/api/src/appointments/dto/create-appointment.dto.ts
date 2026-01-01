@@ -26,3 +26,4 @@ export class CreateAppointmentDto {
   observations?: string;
 }
 
+

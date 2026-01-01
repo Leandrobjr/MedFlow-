@@ -50,13 +50,14 @@ export class AppointmentsService {
     });
   }
 
-  async findAll(tenantId: string, doctorId?: string, date?: string) {
+  async findAll(tenantId: string, doctorId?: string, date?: string, startDate?: string, endDate?: string) {
     const where: any = { tenantId };
     
     if (doctorId) {
       where.staffId = doctorId;
     }
 
+    // Prioridade: date > (startDate + endDate)
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -67,6 +68,20 @@ export class AppointmentsService {
         gte: startOfDay,
         lte: endOfDay,
       };
+    } else if (startDate || endDate) {
+      where.startTime = {};
+      
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.startTime.gte = start;
+      }
+      
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.startTime.lte = end;
+      }
     }
 
     return this.prisma.client.appointment.findMany({
@@ -104,4 +119,5 @@ export class AppointmentsService {
     });
   }
 }
+
 
