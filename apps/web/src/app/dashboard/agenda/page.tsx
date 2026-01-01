@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { appointmentService, Appointment } from '@/services/appointment-service';
 import { patientService, staffService, Patient, Staff } from '@/services/data-service';
-import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings } from 'lucide-react';
+import Link from 'next/link';
 import { format, addDays, subDays, startOfDay, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -182,13 +183,22 @@ export default function AgendaPage() {
           <h1 className="text-2xl font-bold text-gray-900">Agenda Médica</h1>
           <p className="text-gray-600">Gerencie os horários e consultas da clínica.</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Novo Agendamento
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/agenda/configuracao"
+            className="inline-flex items-center justify-center px-4 py-2.5 bg-white text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors shadow-sm border border-gray-200"
+          >
+            <Settings className="h-5 w-5 mr-2" />
+            Configurar Agenda
+          </Link>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Novo Agendamento
+          </button>
+        </div>
       </div>
 
       {/* Date Selector */}
