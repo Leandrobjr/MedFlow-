@@ -6,15 +6,17 @@ async function main() {
   const tenant = await prisma.tenant.upsert({ 
     where: { slug: 'clinica1' }, 
     update: {}, 
-    create: { name: 'ClÇðnica de Teste', slug: 'clinica1' }, 
+    create: { name: 'Clï¿½ï¿½nica de Teste', slug: 'clinica1' }, 
   }); 
   await prisma.user.upsert({ 
     where: { email: 'admin@medflow.local' }, 
     update: {}, 
     create: { email: 'admin@medflow.local', name: 'Administrador', password, role: 'owner', tenantId: tenant.id }, 
   }); 
-  console.log('Seed concluÇðdo!'); 
+  console.log('Seed concluï¿½ï¿½do!'); 
 } 
 main() 
   .catch((e) => { console.error(e); process.exit(1); }) 
-  .finally(async ()=> { await prisma.(); });
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -92,7 +92,7 @@ export class FinanceService {
       },
     });
 
-    const totalPending = fees.reduce((acc, fee) => acc + Number(fee.feeAmount), 0);
+    const totalPending = fees.reduce((acc: number, fee: any) => acc + Number(fee.feeAmount), 0);
 
     return {
       doctorId,
@@ -161,7 +161,7 @@ export class FinanceService {
     let totalIncome = 0;
     let totalExpense = 0;
 
-    transactions.forEach((t) => {
+    transactions.forEach((t: any) => {
       if (t.type === TransactionType.INCOME) {
         totalIncome += Number(t.amount);
       } else {

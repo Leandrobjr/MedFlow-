@@ -7,11 +7,13 @@ import {
   Res,
   Req,
   UnauthorizedException,
+  Get,
 } from '@nestjs/common';
-import { Response, Request } from 'express';
+import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { UserRole } from '../common/shared-types';
 
 @Controller('auth')
 export class AuthController {
@@ -24,20 +26,25 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
+    console.log(`[AUTH] Tentativa de login para: ${loginDto.email}`);
     const { accessToken, refreshToken, user } =
       await this.authService.login(loginDto);
 
+    console.log(`[AUTH] Login bem-sucedido para: ${loginDto.email}. Gerando cookies.`);
+
+    const isProd = process.env.NODE_ENV === 'production';
+
     response.cookie('access_token', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: '/',
     });
 
     response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: '/',
     });
 
@@ -66,6 +73,12 @@ export class AuthController {
     });
 
     return { success: true };
+  }
+
+  @Get('me')
+  async me(@Req() request: Request) {
+    const user = request['user'];
+    return user;
   }
 
   @Post('logout')

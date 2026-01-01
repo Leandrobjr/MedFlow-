@@ -10,7 +10,7 @@ import {
 import { PepService } from './pep.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto, CreateAddendumDto } from './dto/pep.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../common/shared-types';
 
 @Controller('pep')
 export class PepController {
@@ -60,4 +60,5 @@ export class PepController {
     return this.pepService.addAddendum(req.tenantId, id, dto);
   }
 }
+
 

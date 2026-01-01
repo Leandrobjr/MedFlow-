@@ -11,7 +11,7 @@ import {
 import { StaffService } from './staff.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../common/shared-types';
 
 @Controller('staff')
 export class StaffController {
@@ -49,4 +49,5 @@ export class StaffController {
     return this.staffService.remove(req.tenantId, id);
   }
 }
+
 

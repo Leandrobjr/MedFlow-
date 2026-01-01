@@ -1,9 +1,11 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { prisma } from '@medflow/db';
+import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
-  readonly client = prisma;
+  readonly client = new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  });
 
   async onModuleInit() {
     await this.client.$connect();
@@ -23,4 +25,5 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     );
   }
 }
+
 

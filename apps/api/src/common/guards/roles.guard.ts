@@ -1,6 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../shared-types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 @Injectable()
@@ -19,4 +19,5 @@ export class RolesGuard implements CanActivate {
     return requiredRoles.some((role) => user.role?.includes(role));
   }
 }
+
 

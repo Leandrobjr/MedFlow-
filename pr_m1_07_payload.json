@@ -1,0 +1,8 @@
+{
+  "title": "feat: implement Medical Fee Calculation (Repasse Médico)",
+  "body": "## M1-07: Cálculo de Repasse Médico\n\nEste PR finaliza o escopo do MVP do MedFlow, implementando a automação do cálculo de repasse para os profissionais de saúde.\n\n### O que foi feito:\n\n- ✅ Modelagem de Dados: Criada a tabela `MedicalFee` e adicionado campo `commissionRate` no `Staff`.\n- ✅ Automação Financeira: O sistema agora calcula automaticamente o valor do médico sempre que um pagamento de consulta é registrado.\n- ✅ Gestão de Porcentagens: Possibilidade de configurar diferentes taxas de repasse para cada profissional da clínica.\n- ✅ Relatórios de Repasse: API para listar todos os repasses pendentes/pagos e um resumo do total a pagar por médico.\n- ✅ Segurança RLS: Dados de repasse protegidos e isolados por clínica.\n\n### Como testar:\n\n1. Rodar migrações para atualizar o banco:\n```bash\npnpm --filter @medflow/db prisma:migrate\n```\n2. Testar via API:\n   - PATCH `http://clinica1.localhost:3001/staff/{id}` (Definir uma `commissionRate` ex: 70)\n   - POST `http://clinica1.localhost:3001/finance/transactions` (Lançar um pagamento com `staffId` do médico)\n   - GET `http://clinica1.localhost:3001/finance/medical-fees/summary/{staffId}` (Ver o valor calculado automaticamente)\n\n### Próximos passos:\n\n- 🎉 MVP Concluído! O sistema está pronto para a Fase de Testes Internos.",
+  "head": "feature/m1-repasse",
+  "base": "main"
+}
+
+

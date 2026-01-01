@@ -1,0 +1,8 @@
+{
+  "title": "feat: implement Daily Cashier Closure and Financial transactions",
+  "body": "## M1-06: Fechamento de Caixa Diário\n\nEste PR implementa o primeiro módulo financeiro do MedFlow, permitindo o controle de entradas e saídas da recepção e o fechamento do caixa.\n\n### O que foi feito:\n\n- ✅ Modelagem de Dados: Criadas as tabelas `Transaction` e `DailyClosure` no Prisma.\n- ✅ Gestão de Transações: API para registrar entradas (pagamentos) e saídas (despesas).\n- ✅ Fechamento de Caixa: Sistema para conferência e fechamento diário do caixa.\n- ✅ Segurança de Fluxo: Implementada trava que impede novas transações após o caixa do dia ser fechado.\n- ✅ RLS (Row Level Security): Isolamento total dos dados financeiros por clínica (tenant).\n\n### Como testar:\n\n1. Rodar migrações para atualizar o banco:\n```bash\npnpm --filter @medflow/db prisma:migrate\n```\n2. Testar via API (é necessário estar logado como Recepcionista ou Admin):\n   - POST `http://clinica1.localhost:3001/finance/transactions` (Registrar entrada/saída)\n   - GET `http://clinica1.localhost:3001/finance/transactions` (Ver movimentações do dia)\n   - POST `http://clinica1.localhost:3001/finance/closures` (Fechar o caixa do dia)\n\n### Próximos passos:\n\n- M1-07: Cálculo de Repasse Médico (MVP final)",
+  "head": "feature/m1-financeiro",
+  "base": "main"
+}
+
+

@@ -5,11 +5,12 @@ import {
   Body,
   Query,
   Req,
+  Param,
 } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 import { CreateTransactionDto, CreateClosureDto } from './dto/finance.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../common/shared-types';
 
 @Controller('finance')
 export class FinanceController {

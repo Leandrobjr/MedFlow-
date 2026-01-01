@@ -125,9 +125,14 @@ export class ScheduleService {
       throw new NotFoundException('Profissional não encontrado');
     }
 
-    // Validar período
-    const startDate = new Date(dto.startDate);
-    const endDate = dto.endDate ? new Date(dto.endDate) : startDate;
+    // Validar período - parsear como data local para evitar problemas de timezone
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    };
+    
+    const startDate = parseLocalDate(dto.startDate);
+    const endDate = dto.endDate ? parseLocalDate(dto.endDate) : startDate;
 
     if (endDate < startDate) {
       throw new BadRequestException('Data de término deve ser após a data de início');
@@ -199,10 +204,16 @@ export class ScheduleService {
       throw new NotFoundException('Bloqueio não encontrado');
     }
 
+    // Função helper para parsear data como local
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    };
+
     const updateData: any = {};
     if (dto.blockType !== undefined) updateData.blockType = dto.blockType;
-    if (dto.startDate !== undefined) updateData.startDate = new Date(dto.startDate);
-    if (dto.endDate !== undefined) updateData.endDate = dto.endDate ? new Date(dto.endDate) : null;
+    if (dto.startDate !== undefined) updateData.startDate = parseLocalDate(dto.startDate);
+    if (dto.endDate !== undefined) updateData.endDate = dto.endDate ? parseLocalDate(dto.endDate) : null;
     if (dto.startTime !== undefined) updateData.startTime = dto.startTime || null;
     if (dto.endTime !== undefined) updateData.endTime = dto.endTime || null;
     if (dto.reason !== undefined) updateData.reason = dto.reason || null;

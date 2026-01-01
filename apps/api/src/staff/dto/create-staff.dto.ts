@@ -1,5 +1,5 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum } from 'class-validator';
-import { UserRole } from '@medflow/shared';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber } from 'class-validator';
+import { UserRole } from '../../common/shared-types';
 
 export class CreateStaffDto {
   @IsString()
@@ -30,9 +30,25 @@ export class CreateStaffDto {
   @IsOptional()
   crmState?: string;
 
+  @IsString()
+  @IsOptional()
+  rqe?: string;
+
+  @IsString()
+  @IsOptional()
+  rqeState?: string;
+
+  @IsString()
+  @IsOptional()
+  commissionType?: string;
+
   @IsNumber()
   @IsOptional()
   commissionRate?: number;
+
+  @IsNumber()
+  @IsOptional()
+  fixedCommission?: number;
 
   @IsString()
   @IsOptional()

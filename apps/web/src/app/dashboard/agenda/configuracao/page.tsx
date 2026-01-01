@@ -310,51 +310,44 @@ export default function ConfiguracaoAgendaPage() {
 
     setSaving(true);
     try {
-      // Montar weeklySchedule - apenas incluir dias habilitados com períodos
-      const weeklySchedule: any = {};
-      
-      if (formData.monday) {
-        weeklySchedule.monday = {
+      // Montar weeklySchedule - incluir todos os dias, mas apenas com enabled: true para os habilitados
+      const weeklySchedule = {
+        monday: formData.monday ? {
           enabled: true,
-          periods: periods.monday.length > 0 ? periods.monday : [],
-        };
-      }
-      if (formData.tuesday) {
-        weeklySchedule.tuesday = {
+          periods: periods.monday,
+        } : undefined,
+        tuesday: formData.tuesday ? {
           enabled: true,
-          periods: periods.tuesday.length > 0 ? periods.tuesday : [],
-        };
-      }
-      if (formData.wednesday) {
-        weeklySchedule.wednesday = {
+          periods: periods.tuesday,
+        } : undefined,
+        wednesday: formData.wednesday ? {
           enabled: true,
-          periods: periods.wednesday.length > 0 ? periods.wednesday : [],
-        };
-      }
-      if (formData.thursday) {
-        weeklySchedule.thursday = {
+          periods: periods.wednesday,
+        } : undefined,
+        thursday: formData.thursday ? {
           enabled: true,
-          periods: periods.thursday.length > 0 ? periods.thursday : [],
-        };
-      }
-      if (formData.friday) {
-        weeklySchedule.friday = {
+          periods: periods.thursday,
+        } : undefined,
+        friday: formData.friday ? {
           enabled: true,
-          periods: periods.friday.length > 0 ? periods.friday : [],
-        };
-      }
-      if (formData.saturday) {
-        weeklySchedule.saturday = {
+          periods: periods.friday,
+        } : undefined,
+        saturday: formData.saturday ? {
           enabled: true,
-          periods: periods.saturday.length > 0 ? periods.saturday : [],
-        };
-      }
-      if (formData.sunday) {
-        weeklySchedule.sunday = {
+          periods: periods.saturday,
+        } : undefined,
+        sunday: formData.sunday ? {
           enabled: true,
-          periods: periods.sunday.length > 0 ? periods.sunday : [],
-        };
-      }
+          periods: periods.sunday,
+        } : undefined,
+      };
+
+      // Remover propriedades undefined para não enviar dias não configurados
+      Object.keys(weeklySchedule).forEach(key => {
+        if (weeklySchedule[key as keyof typeof weeklySchedule] === undefined) {
+          delete weeklySchedule[key as keyof typeof weeklySchedule];
+        }
+      });
 
       if (currentConfig) {
         await scheduleService.updateConfig(selectedStaffId, {

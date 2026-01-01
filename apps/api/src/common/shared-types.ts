@@ -1,6 +1,4 @@
-// Shared TypeScript types for MedFlow
-export type TenantId = string;
-export type UserId = string;
+// Tipos compartilhados localmente para o Backend (MVP)
 
 export enum UserRole {
   OWNER = 'owner',
@@ -17,6 +15,10 @@ export enum UserStatus {
 export interface JwtPayload {
   sub: string;
   email: string;
+  name: string;
   role: UserRole;
   tenantId: string;
 }
+
+export const API_VERSION = 'v1';
+

@@ -1,0 +1,46 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  const token = request.cookies.get('access_token')?.value;
+  const { pathname } = request.nextUrl;
+
+  // 1. Permitir sempre arquivos estáticos e internos do Next.js
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/static') ||
+    pathname.startsWith('/api') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
+  }
+
+  const isLoginPage = pathname === '/login';
+
+  // 2. Se não estiver logado e não for a página de login, manda para o login
+  if (!token && !isLoginPage) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 3. Se já estiver logado e tentar entrar no login, manda para o dashboard
+  if (token && isLoginPage) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  return NextResponse.next();
+}
+
+// Configurar quais caminhos o middleware deve rodar
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+};
+

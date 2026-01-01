@@ -1,0 +1,8 @@
+{
+  "title": "feat: implement Electronic Medical Record (PEP) with security locks",
+  "body": "## M1-05: PEP Básico (Prontuário Eletrônico do Paciente)\n\nEste PR implementa o núcleo clínico do MedFlow, garantindo a integridade dos dados dos pacientes e seguindo as normas de não-edição pós-finalização.\n\n### O que foi feito:\n\n- ✅ Modelagem de Dados: Criada a tabela `MedicalRecord` e `MedicalAddendum` no Prisma.\n- ✅ Lógica de Segurança (Trava): Implementada regra que impede a edição do prontuário após ser marcado como \"Finalizado\".\n- ✅ Adendos Clínicos: Sistema de retificação via adendos para prontuários já finalizados.\n- ✅ API de Atendimento: Rotas para registrar anamnese, exame físico, diagnóstico, prescrição e conduta.\n- ✅ Histórico do Paciente: Rota para buscar todos os atendimentos anteriores de um paciente de forma cronológica.\n- ✅ Segurança RLS: Dados de prontuário totalmente isolados por clínica (tenant).\n\n### Como testar:\n\n1. Rodar migrações para atualizar o banco:\n```bash\npnpm --filter @medflow/db prisma:migrate\n```\n2. Testar via API (é necessário estar logado como Médico):\n   - POST `http://clinica1.localhost:3001/pep` (Criar atendimento)\n   - PATCH `http://clinica1.localhost:3001/pep/{id}` (Editar enquanto aberto)\n   - POST `http://clinica1.localhost:3001/pep/{id}/finalize` (Travar prontuário)\n   - POST `http://clinica1.localhost:3001/pep/{id}/addendum` (Adicionar retificação)\n\n### Próximos passos:\n\n- M1-06: Fechamento de Caixa Diário (Financeiro Básico)",
+  "head": "feature/m1-pep",
+  "base": "main"
+}
+
+

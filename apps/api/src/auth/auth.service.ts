@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import { UserRole } from '@medflow/shared';
+import { UserRole } from '../common/shared-types';
 
 @Injectable()
 export class AuthService {
@@ -24,18 +24,19 @@ export class AuthService {
     const payload = {
       sub: user.id,
       email: user.email,
+      name: user.name,
       role: user.role as UserRole,
       tenantId: user.tenantId,
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_SECRET || 'super-secret-key-change-me',
-      expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+      expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key-change-me',
-      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+      expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN as any) || '7d',
     });
 
     return {
@@ -65,7 +66,7 @@ export class AuthService {
         },
         {
           secret: process.env.JWT_SECRET || 'super-secret-key-change-me',
-          expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+          expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
         },
       );
 
@@ -75,4 +76,5 @@ export class AuthService {
     }
   }
 }
+
 
