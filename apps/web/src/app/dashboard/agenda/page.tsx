@@ -178,12 +178,14 @@ export default function AgendaPage() {
     if (doctors.length > 0) {
       fetchScheduleConfigs();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctors]);
 
   useEffect(() => {
     if (doctors.length > 0) {
       fetchScheduleBlocks();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctors, selectedDate, view]);
 
   useEffect(() => {
@@ -354,7 +356,7 @@ export default function AgendaPage() {
             <Loader2 className="h-10 w-10 animate-spin mb-4 text-blue-500" />
             <p>Carregando consultas...</p>
           </div>
-        ) : dayAppointments.length === 0 ? (
+        ) : dayAppointments.length === 0 && dayAvailability.length === 0 ? (
           <div className="p-20 flex flex-col items-center justify-center text-gray-400 text-center">
             <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
             <p className="text-lg font-medium text-gray-500">Nenhuma consulta para este dia</p>
@@ -368,6 +370,7 @@ export default function AgendaPage() {
         ) : (
           <>
             {/* Agendamentos existentes */}
+            {dayAppointments.length > 0 && (
             <div className="divide-y divide-gray-100">
               {dayAppointments
                 .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
@@ -446,6 +449,7 @@ export default function AgendaPage() {
                 </div>
               ))}
             </div>
+            )}
 
             {/* Horários Disponíveis */}
             {dayAvailability.length > 0 && (
