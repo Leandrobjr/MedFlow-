@@ -4,22 +4,25 @@ import React from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { LogOut, User, LayoutDashboard, Calendar, Users, FileText, Settings, DollarSign, Menu, X, UserCog } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [hasRedirected, setHasRedirected] = React.useState(false);
 
   // Redirecionar para login se não estiver autenticado
   React.useEffect(() => {
-    if (!loading && !user) {
-      window.location.href = '/login';
+    if (!loading && !user && !hasRedirected) {
+      setHasRedirected(true);
+      router.push('/login');
     }
-  }, [user, loading]);
+  }, [user, loading, hasRedirected, router]);
 
-  // Mostrar loading enquanto verifica autenticação
-  if (loading) {
+  // Mostrar loading enquanto verifica autenticação ou se redirecionou
+  if (loading || (hasRedirected && !user)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">

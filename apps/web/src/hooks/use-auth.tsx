@@ -36,20 +36,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const response = await api.get('/auth/me').catch(() => null);
+        const response = await api.get('/auth/me');
         if (response?.data) {
           setUser(response.data);
         } else {
           setUser(null);
         }
-      } catch (error) {
+      } catch (error: any) {
         // Silenciosamente falha se não houver sessão válida
+        // Ignorar erros 401 (não autenticado) e 403 (não autorizado)
+        if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+          console.error('[AUTH] Erro ao verificar autenticação:', error);
+        }
         setUser(null);
       } finally {
         setLoading(false);
       }
     };
-    checkUser();
+    
+    // Apenas verificar uma vez ao montar o componente
+    let mounted = true;
+    checkUser().then(() => {
+      if (!mounted) return;
+    });
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
