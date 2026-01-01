@@ -60,7 +60,7 @@ export class ScheduleService {
     }
 
     // Parsear weeklySchedule se for string
-    let weeklySchedule = config.weeklySchedule;
+    let weeklySchedule: any = config.weeklySchedule;
     if (typeof weeklySchedule === 'string') {
       try {
         weeklySchedule = JSON.parse(weeklySchedule);
@@ -99,7 +99,7 @@ export class ScheduleService {
     });
 
     // Parsear weeklySchedule se for string
-    let weeklySchedule = updated.weeklySchedule;
+    let weeklySchedule: any = updated.weeklySchedule;
     if (typeof weeklySchedule === 'string') {
       try {
         weeklySchedule = JSON.parse(weeklySchedule);
