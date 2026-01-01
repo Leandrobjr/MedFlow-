@@ -135,7 +135,7 @@ export function calculateAvailableSlots(
   const dayName = dayIndexToName[dayIndex];
   const daySchedule = config.weeklySchedule[dayName as keyof typeof config.weeklySchedule];
 
-  if (!daySchedule || !daySchedule.enabled || !daySchedule.periods) {
+  if (!daySchedule || !daySchedule.enabled || !daySchedule.periods || daySchedule.periods.length === 0) {
     return [];
   }
 
