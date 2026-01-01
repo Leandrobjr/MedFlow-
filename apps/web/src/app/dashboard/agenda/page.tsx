@@ -453,7 +453,7 @@ export default function AgendaPage() {
 
             {/* Horários Disponíveis */}
             {dayAvailability.length > 0 && (
-              <div className="border-t border-gray-200 bg-gray-50">
+              <div className={dayAppointments.length > 0 ? "border-t border-gray-200 bg-gray-50" : "bg-gray-50"}>
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                     <Clock className="h-4 w-4" />
@@ -462,8 +462,7 @@ export default function AgendaPage() {
                   <div className="space-y-4">
                     {dayAvailability.map((avail) => {
                       const doctor = doctors.find(d => d.id === avail.staffId);
-                      const config = scheduleConfigs.find(c => c.staffId === avail.staffId);
-                      if (!doctor || !config) return null;
+                      if (!doctor) return null;
 
                       return (
                         <div key={avail.staffId} className="bg-white rounded-lg p-3 border border-gray-200">
@@ -488,7 +487,7 @@ export default function AgendaPage() {
                                   setIsModalOpen(true);
                                 }}
                                 className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                                title={`Clique para agendar neste horário`}
+                                title={`Clique para agendar às ${format(new Date(slot.start), 'HH:mm')}`}
                               >
                                 {format(new Date(slot.start), 'HH:mm')}
                               </button>
