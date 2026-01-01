@@ -37,11 +37,11 @@ export interface ScheduleBlock {
   id: string;
   staffId: string;
   blockType: 'date' | 'period';
-  startDate: string;
-  endDate?: string;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
+  startDate: string | Date; // Pode vir como string ISO ou Date
+  endDate?: string | Date | null; // Pode vir como string ISO, Date ou null
+  startTime?: string | null;
+  endTime?: string | null;
+  reason?: string | null;
   isRecurring: boolean;
   staff?: {
     id: string;
