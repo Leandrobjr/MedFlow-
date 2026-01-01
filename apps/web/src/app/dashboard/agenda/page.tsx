@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { appointmentService, Appointment } from '@/services/appointment-service';
 import { patientService, staffService, Patient, Staff } from '@/services/data-service';
+import { scheduleService, ScheduleConfig, ScheduleBlock } from '@/services/schedule-service';
+import { calculateDayAvailability, DayAvailability } from '@/lib/availability-utils';
 import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings, Grid3x3, CalendarDays, List } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays, subDays, startOfDay, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, addWeeks, subWeeks, addMonths, subMonths, getWeek, isToday, parseISO } from 'date-fns';
@@ -18,6 +20,12 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  
+  // Availability data
+  const [scheduleConfigs, setScheduleConfigs] = useState<ScheduleConfig[]>([]);
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
+  const [dayAvailability, setDayAvailability] = useState<DayAvailability[]>([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   
   // Form state
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -79,6 +87,85 @@ export default function AgendaPage() {
     }
   };
 
+  const fetchScheduleConfigs = async () => {
+    try {
+      // Buscar configurações para todos os profissionais
+      const configs: ScheduleConfig[] = [];
+      
+      for (const doctor of doctors) {
+        try {
+          const config = await scheduleService.getConfigByStaff(doctor.id);
+          if (config) {
+            configs.push(config);
+          }
+        } catch (error: any) {
+          // Ignorar erro 404 (profissional sem configuração)
+          if (error.response?.status !== 404) {
+            console.error(`Erro ao buscar config para ${doctor.id}:`, error);
+          }
+        }
+      }
+      
+      setScheduleConfigs(configs);
+    } catch (error) {
+      console.error('Erro ao carregar configurações de agenda:', error);
+    }
+  };
+
+  const fetchScheduleBlocks = async () => {
+    try {
+      // Buscar bloqueios para o período atual
+      let startDate: string;
+      let endDate: string;
+
+      if (view === 'day') {
+        startDate = format(selectedDate, 'yyyy-MM-dd');
+        endDate = format(selectedDate, 'yyyy-MM-dd');
+      } else if (view === 'week') {
+        const weekStart = startOfWeek(selectedDate, { locale: ptBR });
+        const weekEnd = endOfWeek(selectedDate, { locale: ptBR });
+        startDate = format(weekStart, 'yyyy-MM-dd');
+        endDate = format(weekEnd, 'yyyy-MM-dd');
+      } else {
+        const monthStart = startOfMonth(selectedDate);
+        const monthEnd = endOfMonth(selectedDate);
+        startDate = format(monthStart, 'yyyy-MM-dd');
+        endDate = format(monthEnd, 'yyyy-MM-dd');
+      }
+
+      const allBlocks: ScheduleBlock[] = [];
+      
+      for (const doctor of doctors) {
+        try {
+          const blocks = await scheduleService.getBlocksByStaff(doctor.id, startDate, endDate);
+          allBlocks.push(...blocks);
+        } catch (error: any) {
+          if (error.response?.status !== 404) {
+            console.error(`Erro ao buscar bloqueios para ${doctor.id}:`, error);
+          }
+        }
+      }
+      
+      setScheduleBlocks(allBlocks);
+    } catch (error) {
+      console.error('Erro ao carregar bloqueios:', error);
+    }
+  };
+
+  // Calcular disponibilidade usando useMemo para evitar recalcular desnecessariamente
+  const calculatedDayAvailability = useMemo(() => {
+    if (view !== 'day' || scheduleConfigs.length === 0) {
+      return [];
+    }
+
+    return calculateDayAvailability(
+      selectedDate,
+      scheduleConfigs,
+      scheduleBlocks,
+      appointments
+    );
+  }, [view, selectedDate, scheduleConfigs, scheduleBlocks, appointments]);
+
   useEffect(() => {
     fetchAppointments();
   }, [selectedDate, view, selectedStaffId]);
@@ -86,6 +173,22 @@ export default function AgendaPage() {
   useEffect(() => {
     fetchInitialData();
   }, []);
+
+  useEffect(() => {
+    if (doctors.length > 0) {
+      fetchScheduleConfigs();
+    }
+  }, [doctors]);
+
+  useEffect(() => {
+    if (doctors.length > 0) {
+      fetchScheduleBlocks();
+    }
+  }, [doctors, selectedDate, view]);
+
+  useEffect(() => {
+    setDayAvailability(calculatedDayAvailability);
+  }, [calculatedDayAvailability]);
 
   const validateAppointment = (): boolean => {
     if (!formData.patientId) {
@@ -263,10 +366,12 @@ export default function AgendaPage() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {dayAppointments
-              .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-              .map((apt) => (
+          <>
+            {/* Agendamentos existentes */}
+            <div className="divide-y divide-gray-100">
+              {dayAppointments
+                .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                .map((apt) => (
                 <div key={apt.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center gap-4">
                   <div className="min-w-[80px] text-center">
                     <p className="text-sm font-bold text-gray-900">
@@ -340,7 +445,59 @@ export default function AgendaPage() {
                   </div>
                 </div>
               ))}
-          </div>
+            </div>
+
+            {/* Horários Disponíveis */}
+            {dayAvailability.length > 0 && (
+              <div className="border-t border-gray-200 bg-gray-50">
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Horários Disponíveis
+                  </h3>
+                  <div className="space-y-4">
+                    {dayAvailability.map((avail) => {
+                      const doctor = doctors.find(d => d.id === avail.staffId);
+                      const config = scheduleConfigs.find(c => c.staffId === avail.staffId);
+                      if (!doctor || !config) return null;
+
+                      return (
+                        <div key={avail.staffId} className="bg-white rounded-lg p-3 border border-gray-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm font-medium text-gray-900">
+                              Dr(a). {doctor.name}
+                              {doctor.specialty && <span className="text-gray-500 ml-1">- {doctor.specialty}</span>}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {avail.slots.map((slot, index) => (
+                              <button
+                                key={index}
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    doctorId: avail.staffId,
+                                    startTime: format(new Date(slot.start), 'HH:mm'),
+                                    endTime: format(new Date(slot.end), 'HH:mm'),
+                                  });
+                                  setIsModalOpen(true);
+                                }}
+                                className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                                title={`Clique para agendar neste horário`}
+                              >
+                                {format(new Date(slot.start), 'HH:mm')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     );
