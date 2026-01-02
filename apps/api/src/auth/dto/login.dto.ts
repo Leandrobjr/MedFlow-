@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, MinLength, IsBoolean, IsOptional } from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'E-mail inválido' })
@@ -8,6 +8,10 @@ export class LoginDto {
   @IsNotEmpty({ message: 'Senha é obrigatória' })
   @MinLength(8, { message: 'A senha deve ter pelo menos 8 caracteres' })
   password: string;
+
+  @IsBoolean()
+  @IsOptional()
+  rememberMe?: boolean;
 }
 
 

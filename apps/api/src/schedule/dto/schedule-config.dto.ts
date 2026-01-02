@@ -20,12 +20,39 @@ export class DayScheduleDto {
 }
 
 export class WeeklyScheduleDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   monday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   tuesday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   wednesday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   thursday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   friday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   saturday?: DayScheduleDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DayScheduleDto)
   sunday?: DayScheduleDto;
 }
 

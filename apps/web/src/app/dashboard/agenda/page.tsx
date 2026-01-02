@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { appointmentService, Appointment } from '@/services/appointment-service';
 import { patientService, staffService, Patient, Staff } from '@/services/data-service';
 import { scheduleService, ScheduleConfig, ScheduleBlock } from '@/services/schedule-service';
-import { calculateDayAvailability, DayAvailability } from '@/lib/availability-utils';
+import { calculateDayAvailability, calculatePeriodAvailability, DayAvailability } from '@/lib/availability-utils';
 import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings, Grid3x3, CalendarDays, List } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays, subDays, startOfDay, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, addWeeks, subWeeks, addMonths, subMonths, getWeek, isToday, parseISO } from 'date-fns';
@@ -25,6 +25,7 @@ export default function AgendaPage() {
   const [scheduleConfigs, setScheduleConfigs] = useState<ScheduleConfig[]>([]);
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
   const [dayAvailability, setDayAvailability] = useState<DayAvailability[]>([]);
+  const [periodAvailability, setPeriodAvailability] = useState<Map<string, DayAvailability[]>>(new Map());
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   
   // Form state
@@ -166,6 +167,31 @@ export default function AgendaPage() {
     );
   }, [view, selectedDate, scheduleConfigs, scheduleBlocks, appointments]);
 
+  const calculatedPeriodAvailability = useMemo(() => {
+    if (view === 'day' || scheduleConfigs.length === 0) {
+      return new Map<string, DayAvailability[]>();
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (view === 'week') {
+      startDate = startOfWeek(selectedDate, { locale: ptBR });
+      endDate = endOfWeek(selectedDate, { locale: ptBR });
+    } else {
+      startDate = startOfMonth(selectedDate);
+      endDate = endOfMonth(selectedDate);
+    }
+
+    return calculatePeriodAvailability(
+      startDate,
+      endDate,
+      scheduleConfigs,
+      scheduleBlocks,
+      appointments
+    );
+  }, [view, selectedDate, scheduleConfigs, scheduleBlocks, appointments]);
+
   useEffect(() => {
     fetchAppointments();
   }, [selectedDate, view, selectedStaffId]);
@@ -191,6 +217,10 @@ export default function AgendaPage() {
   useEffect(() => {
     setDayAvailability(calculatedDayAvailability);
   }, [calculatedDayAvailability]);
+
+  useEffect(() => {
+    setPeriodAvailability(calculatedPeriodAvailability);
+  }, [calculatedPeriodAvailability]);
 
   const validateAppointment = (): boolean => {
     if (!formData.patientId) {
@@ -546,11 +576,51 @@ export default function AgendaPage() {
                         return aptHour === hour;
                       });
 
+                      const dateKey = format(day, 'yyyy-MM-dd');
+                      const dayAvail = periodAvailability.get(dateKey) || [];
+                      const availableSlotsAtHour = dayAvail.flatMap(avail => 
+                        avail.slots.filter(slot => new Date(slot.start).getHours() === hour)
+                      );
+
+                      // Buscar bloqueios para este dia e hora
+                      const dayBlocks = scheduleBlocks.filter(block => {
+                        if (block.staffId !== selectedStaffId && selectedStaffId !== '') return false;
+                        
+                        // Parsear data do bloqueio sem timezone (YYYY-MM-DD)
+                        const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
+                        const blockEndStr = block.endDate 
+                          ? (typeof block.endDate === 'string' ? block.endDate.split('T')[0] : format(new Date(block.endDate), 'yyyy-MM-dd'))
+                          : blockStartStr;
+                        
+                        const currentDayStr = format(day, 'yyyy-MM-dd');
+                        
+                        const isInsideRange = currentDayStr >= blockStartStr && currentDayStr <= blockEndStr;
+                        if (!isInsideRange) return false;
+
+                        if (block.blockType === 'date') return true;
+
+                        if (block.blockType === 'period' && block.startTime && block.endTime) {
+                          const [blockH] = block.startTime.split(':').map(Number);
+                          return blockH === hour;
+                        }
+                        return false;
+                      });
+
                       return (
                         <div
                           key={day.toISOString()}
                           className="p-1 border-r border-gray-100 last:border-r-0 min-h-[60px]"
                         >
+                          {dayBlocks.map((block) => (
+                            <div
+                              key={block.id}
+                              className="mb-1 p-2 bg-red-100 border border-red-200 rounded text-[10px] font-bold text-red-700 uppercase"
+                              title={`BLOQUEIO: ${block.reason || 'Indisponível'}`}
+                            >
+                              Bloqueado
+                            </div>
+                          ))}
+
                           {dayAppointments.map((apt) => (
                             <div
                               key={apt.id}
@@ -565,6 +635,35 @@ export default function AgendaPage() {
                               </div>
                             </div>
                           ))}
+                          
+                          {dayAppointments.length === 0 && availableSlotsAtHour.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {availableSlotsAtHour.slice(0, 2).map((slot, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    setSelectedDate(day);
+                                    setFormData({
+                                      ...formData,
+                                      doctorId: slot.staffId,
+                                      startTime: format(new Date(slot.start), 'HH:mm'),
+                                      endTime: format(new Date(slot.end), 'HH:mm'),
+                                    });
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="p-1 bg-green-50 border border-green-100 text-[9px] text-green-700 rounded hover:bg-green-100 transition-colors w-full text-left truncate"
+                                  title={`Livre: ${format(new Date(slot.start), 'HH:mm')} - Dr(a). ${doctors.find(d => d.id === slot.staffId)?.name}`}
+                                >
+                                  {format(new Date(slot.start), 'HH:mm')} Livre
+                                </button>
+                              ))}
+                              {availableSlotsAtHour.length > 2 && (
+                                <div className="text-[8px] text-green-600 font-medium pl-1">
+                                  +{availableSlotsAtHour.length - 2} horários
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -611,22 +710,52 @@ export default function AgendaPage() {
                 const dayAppointments = getAppointmentsForDate(day);
                 const isCurrentMonth = isSameMonth(day, selectedDate);
                 const isCurrentDay = isToday(day);
+                
+                const dateKey = format(day, 'yyyy-MM-dd');
+                const dayAvail = periodAvailability.get(dateKey) || [];
+                const totalAvailableSlots = dayAvail.reduce((acc, curr) => acc + curr.slots.length, 0);
+
+                // Verificar se há bloqueio de dia inteiro
+                const hasFullDayBlock = scheduleBlocks.some(block => {
+                  if (block.staffId !== selectedStaffId && selectedStaffId !== '') return false;
+                  if (block.blockType !== 'date') return false;
+                  
+                  const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
+                  const blockEndStr = block.endDate 
+                    ? (typeof block.endDate === 'string' ? block.endDate.split('T')[0] : format(new Date(block.endDate), 'yyyy-MM-dd'))
+                    : blockStartStr;
+                  
+                  const currentDayStr = format(day, 'yyyy-MM-dd');
+                  return currentDayStr >= blockStartStr && currentDayStr <= blockEndStr;
+                });
 
                 return (
                   <div
                     key={day.toISOString()}
                     className={`min-h-[100px] p-2 border border-gray-200 rounded-lg cursor-pointer transition-colors ${
                       !isCurrentMonth ? 'bg-gray-50 opacity-50' : 'bg-white hover:bg-gray-50'
-                    } ${isCurrentDay ? 'ring-2 ring-blue-500' : ''}`}
+                    } ${isCurrentDay ? 'ring-2 ring-blue-500' : ''} ${hasFullDayBlock ? 'bg-red-50/50' : ''}`}
                     onClick={() => {
                       setSelectedDate(day);
                       setView('day');
                     }}
                   >
-                    <div className={`text-sm font-semibold mb-1 ${
-                      isCurrentDay ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
-                    }`}>
-                      {format(day, 'd')}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className={`text-sm font-semibold ${
+                        isCurrentDay ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+                      }`}>
+                        {format(day, 'd')}
+                      </div>
+                      {hasFullDayBlock && (
+                        <span className="text-[8px] px-1 py-0.5 bg-red-100 text-red-700 rounded-full font-bold">
+                          BLOQUEADO
+                        </span>
+                      )}
+                      {totalAvailableSlots > 0 && isCurrentMonth && !hasFullDayBlock && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-bold" title={`${totalAvailableSlots} horários livres`}>
+                          {totalAvailableSlots}L
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       {dayAppointments.slice(0, 3).map((apt) => (

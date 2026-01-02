@@ -166,20 +166,27 @@ export class ScheduleService {
   async getBlocksByStaff(tenantId: string, staffId: string, startDate?: string, endDate?: string) {
     const where: any = { staffId, tenantId };
 
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    };
+
     if (startDate || endDate) {
       where.OR = [];
       if (startDate) {
+        const start = parseLocalDate(startDate);
         where.OR.push({
-          startDate: { gte: new Date(startDate) },
+          startDate: { gte: start },
         });
       }
       if (endDate) {
+        const end = parseLocalDate(endDate);
         where.OR.push({
-          endDate: { lte: new Date(endDate) },
+          endDate: { lte: end },
         });
         where.OR.push({
           AND: [
-            { startDate: { lte: new Date(endDate) } },
+            { startDate: { lte: end } },
             { endDate: null },
           ],
         });

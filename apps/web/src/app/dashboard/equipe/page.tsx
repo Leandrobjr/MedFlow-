@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { staffService, Staff } from '@/services/data-service';
-import { UserCog, Plus, Stethoscope, Mail, Phone, MoreVertical, Loader2, XCircle, Percent, DollarSign, Award, Edit, Trash2 } from 'lucide-react';
+import { UserCog, Plus, Stethoscope, Mail, Phone, MoreVertical, Loader2, XCircle, Percent, DollarSign, Award, Edit, Trash2, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatPhone, validatePhone, validateEmail } from '@/lib/validations';
 
@@ -42,6 +42,8 @@ export default function EquipePage() {
     commissionType: 'PERCENTAGE',
     commissionRate: 0,
     fixedCommission: 0,
+    password: '',
+    createAccount: false,
   });
   
   // Form errors
@@ -84,6 +86,18 @@ export default function EquipePage() {
       }
       if (formData.commissionType === 'FIXED' && (!formData.fixedCommission || formData.fixedCommission <= 0)) {
         errors.fixedCommission = 'Valor fixo deve ser maior que zero';
+      }
+    }
+
+    if (formData.createAccount || (editingStaff?.userId && formData.password)) {
+      if (!formData.password) {
+        errors.password = 'Senha é obrigatória para criar uma conta';
+      } else if (formData.password.length < 8) {
+        errors.password = 'Senha deve ter pelo menos 8 caracteres';
+      }
+      
+      if (formData.createAccount && !formData.email) {
+        errors.email = 'E-mail é obrigatório para criar uma conta';
       }
     }
     
@@ -140,6 +154,8 @@ export default function EquipePage() {
       commissionType: member.commissionType || 'PERCENTAGE',
       commissionRate: member.commissionRate ? Number(member.commissionRate) : 0,
       fixedCommission: member.fixedCommission ? Number(member.fixedCommission) : 0,
+      password: '',
+      createAccount: false,
     });
     setIsModalOpen(true);
   };
@@ -167,7 +183,8 @@ export default function EquipePage() {
       specialty: '', crm: '', crmState: 'SP',
       rqe: '', rqeState: 'SP',
       commissionType: 'PERCENTAGE',
-      commissionRate: 0, fixedCommission: 0
+      commissionRate: 0, fixedCommission: 0,
+      password: '', createAccount: false
     });
     setFormErrors({});
     setEditingStaff(null);
@@ -416,6 +433,61 @@ export default function EquipePage() {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Conta de Usuário e Senha */}
+                <div className="md:col-span-2 space-y-4">
+                  <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-50 pb-2 flex items-center">
+                    <Lock className="h-4 w-4 mr-2" /> 
+                    {editingStaff?.userId ? 'Segurança e Acesso' : 'Conta de Usuário'}
+                  </h3>
+                  
+                  {!editingStaff?.userId && (
+                    <div className="flex items-center mb-4">
+                      <input
+                        id="createAccount"
+                        type="checkbox"
+                        checked={formData.createAccount}
+                        onChange={(e) => setFormData({ ...formData, createAccount: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="createAccount" className="ml-2 block text-sm text-gray-900 font-medium">
+                        Criar conta de usuário para acesso ao sistema
+                      </label>
+                    </div>
+                  )}
+
+                  {(formData.createAccount || editingStaff?.userId) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                      <div className="md:col-span-2">
+                        <p className="text-xs text-blue-600 mb-2 italic">
+                          {editingStaff?.userId 
+                            ? "Preencha a senha apenas se desejar alterá-la." 
+                            : "Defina uma senha para que este profissional possa fazer login."}
+                        </p>
+                      </div>
+                      <div className="md:col-span-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Senha <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => {
+                            setFormData({ ...formData, password: e.target.value });
+                            if (formErrors.password) setFormErrors({ ...formErrors, password: '' });
+                          }}
+                          className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none ${
+                            formErrors.password ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="Mínimo 8 caracteres"
+                        />
+                        {formErrors.password && (
+                          <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Registro Profissional (Apenas para profissionais de saúde) */}

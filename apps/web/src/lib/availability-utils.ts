@@ -58,42 +58,32 @@ function isTimeBlocked(
   return blocks.some(block => {
     if (block.staffId !== staffId) return false;
 
-    const blockStart = typeof block.startDate === 'string' 
-      ? new Date(block.startDate) 
-      : new Date(block.startDate);
-    const blockEnd = block.endDate 
-      ? (typeof block.endDate === 'string' ? new Date(block.endDate) : new Date(block.endDate))
-      : blockStart;
+    // Usar comparação de string para evitar problemas de timezone
+    const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
+    const blockEndStr = block.endDate 
+      ? (typeof block.endDate === 'string' ? block.endDate.split('T')[0] : format(new Date(block.endDate), 'yyyy-MM-dd'))
+      : blockStartStr;
+    
+    const currentDayStr = format(dateTime, 'yyyy-MM-dd');
 
     // Bloqueio de dia inteiro
     if (block.blockType === 'date') {
-      const blockStartDay = new Date(blockStart);
-      blockStartDay.setHours(0, 0, 0, 0);
-      const blockEndDay = new Date(blockEnd);
-      blockEndDay.setHours(23, 59, 59, 999);
-      
-      return dateTime >= blockStartDay && dateTime <= blockEndDay;
+      return currentDayStr >= blockStartStr && currentDayStr <= blockEndStr;
     }
 
     // Bloqueio de período
     if (block.blockType === 'period' && block.startTime && block.endTime) {
-      const blockDateTimeStart = new Date(blockStart);
-      const [startHours, startMinutes] = block.startTime.split(':').map(Number);
-      blockDateTimeStart.setHours(startHours, startMinutes, 0, 0);
+      if (currentDayStr < blockStartStr || currentDayStr > blockEndStr) return false;
 
-      const blockDateTimeEnd = new Date(blockStart);
-      const [endHours, endMinutes] = block.endTime.split(':').map(Number);
-      blockDateTimeEnd.setHours(endHours, endMinutes, 0, 0);
+      const [slotH, slotM] = format(dateTime, 'HH:mm').split(':').map(Number);
+      const [startH, startM] = block.startTime.split(':').map(Number);
+      const [endH, endM] = block.endTime.split(':').map(Number);
 
-      // Se o bloqueio se estende por múltiplos dias
-      if (blockEnd && !isSameDay(blockStart, blockEnd)) {
-        const finalBlockEnd = new Date(blockEnd);
-        finalBlockEnd.setHours(endHours, endMinutes, 0, 0);
-        
-        return dateTime >= blockDateTimeStart && dateTime <= finalBlockEnd;
-      }
+      const slotTotal = slotH * 60 + slotM;
+      const startTotal = startH * 60 + startM;
+      const endTotal = endH * 60 + endM;
 
-      return dateTime >= blockDateTimeStart && dateTime <= blockDateTimeEnd;
+      return slotTotal >= startTotal && slotTotal < endTotal;
     }
 
     return false;

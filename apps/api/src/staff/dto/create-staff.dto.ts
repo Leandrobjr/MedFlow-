@@ -53,5 +53,13 @@ export class CreateStaffDto {
   @IsString()
   @IsOptional()
   userId?: string;
+
+  @IsString()
+  @IsOptional()
+  password?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  createAccount?: boolean;
 }
 

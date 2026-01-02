@@ -776,24 +776,27 @@ export default function ConfiguracaoAgendaPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm font-medium text-gray-900">
-                              {format(
-                                typeof block.startDate === 'string' ? new Date(block.startDate) : new Date(block.startDate),
-                                "dd 'de' MMMM 'de' yyyy",
-                                { locale: ptBR }
-                              )}
+                              {(() => {
+                                const dateStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
+                                const [y, m, d] = dateStr.split('-').map(Number);
+                                return format(new Date(y, m - 1, d), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+                              })()}
                             </span>
                             {block.endDate && (
-                              (typeof block.endDate === 'string' ? block.endDate : format(new Date(block.endDate), 'yyyy-MM-dd')) !==
-                              (typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd'))
+                              (() => {
+                                const startStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
+                                const endStr = typeof block.endDate === 'string' ? block.endDate.split('T')[0] : format(new Date(block.endDate), 'yyyy-MM-dd');
+                                return startStr !== endStr;
+                              })()
                             ) && (
                               <>
                                 <span className="text-gray-400">até</span>
                                 <span className="text-sm font-medium text-gray-900">
-                                  {format(
-                                    typeof block.endDate === 'string' ? new Date(block.endDate) : new Date(block.endDate),
-                                    "dd 'de' MMMM 'de' yyyy",
-                                    { locale: ptBR }
-                                  )}
+                                  {(() => {
+                                    const dateStr = typeof block.endDate === 'string' ? block.endDate!.split('T')[0] : format(new Date(block.endDate!), 'yyyy-MM-dd');
+                                    const [y, m, d] = dateStr.split('-').map(Number);
+                                    return format(new Date(y, m - 1, d), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+                                  })()}
                                 </span>
                               </>
                             )}

@@ -33,20 +33,22 @@ export class AuthController {
     console.log(`[AUTH] Login bem-sucedido para: ${loginDto.email}. Gerando cookies.`);
 
     const isProd = process.env.NODE_ENV === 'production';
-
-    response.cookie('access_token', accessToken, {
+    
+    // Se "Lembrar Senha" estiver ativado, os cookies duram 30 dias.
+    // Caso contrário, são cookies de sessão (expiram ao fechar o navegador).
+    const cookieOptions: any = {
       httpOnly: true,
       secure: isProd,
       sameSite: isProd ? 'none' : 'lax',
       path: '/',
-    });
+    };
 
-    response.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      path: '/',
-    });
+    if (loginDto.rememberMe) {
+      cookieOptions.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 dias
+    }
+
+    response.cookie('access_token', accessToken, cookieOptions);
+    response.cookie('refresh_token', refreshToken, cookieOptions);
 
     return { user };
   }

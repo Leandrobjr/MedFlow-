@@ -1,12 +1,48 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, createStaffDto: CreateStaffDto) {
+    // Se solicitado criar conta de usuário, validar e-mail e senha
+    let userId: string | undefined = createStaffDto.userId;
+
+    if (createStaffDto.createAccount) {
+      if (!createStaffDto.email) {
+        throw new BadRequestException('E-mail é obrigatório para criar uma conta de usuário');
+      }
+      if (!createStaffDto.password) {
+        throw new BadRequestException('Senha é obrigatória para criar uma conta de usuário');
+      }
+
+      // Verificar se o e-mail já existe
+      const existingUser = await this.prisma.client.user.findUnique({
+        where: { email: createStaffDto.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('Este e-mail já está sendo usado por outro usuário');
+      }
+
+      const hashedPassword = await bcrypt.hash(createStaffDto.password, 10);
+      
+      const user = await this.prisma.client.user.create({
+        data: {
+          email: createStaffDto.email,
+          name: createStaffDto.name,
+          password: hashedPassword,
+          role: createStaffDto.role.toLowerCase(), // Simplificação do mapeamento de roles
+          tenantId,
+        },
+      });
+
+      userId = user.id;
+    }
+
     // Preparar dados, convertendo valores numéricos para Decimal quando necessário
     const data: any = {
       name: createStaffDto.name,
@@ -20,6 +56,7 @@ export class StaffService {
       rqeState: createStaffDto.rqeState && createStaffDto.rqeState.trim() ? createStaffDto.rqeState.trim() : null,
       commissionType: createStaffDto.commissionType || 'PERCENTAGE',
       tenantId,
+      userId,
     };
 
     // Tratar valores de comissão baseado no tipo
@@ -45,7 +82,7 @@ export class StaffService {
     }
 
     // Remover userId se não for fornecido
-    if (createStaffDto.userId) {
+    if (createStaffDto.userId && !createStaffDto.createAccount) {
       data.userId = createStaffDto.userId;
     }
 
@@ -70,9 +107,66 @@ export class StaffService {
   }
 
   async update(tenantId: string, id: string, updateStaffDto: any) {
+    const { password, createAccount, ...staffData } = updateStaffDto;
+    
+    // Buscar staff atual
+    const staff = await this.prisma.client.staff.findFirst({
+      where: { id, tenantId },
+      include: { user: true },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('Membro da equipe não encontrado');
+    }
+
+    let userId = staff.userId;
+
+    // Se solicitado criar conta ou atualizar senha
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      if (staff.userId) {
+        // Atualizar senha do usuário existente
+        await this.prisma.client.user.update({
+          where: { id: staff.userId },
+          data: { password: hashedPassword },
+        });
+      } else if (createAccount) {
+        // Criar novo usuário se não existir e createAccount for true
+        if (!staff.email && !staffData.email) {
+          throw new BadRequestException('E-mail é obrigatório para criar uma conta de usuário');
+        }
+
+        const email = staffData.email || staff.email;
+
+        // Verificar se o e-mail já existe
+        const existingUser = await this.prisma.client.user.findUnique({
+          where: { email },
+        });
+
+        if (existingUser) {
+          throw new BadRequestException('Este e-mail já está sendo usado por outro usuário');
+        }
+
+        const user = await this.prisma.client.user.create({
+          data: {
+            email,
+            name: staffData.name || staff.name,
+            password: hashedPassword,
+            role: (staffData.role || staff.role).toLowerCase(),
+            tenantId,
+          },
+        });
+        userId = user.id;
+      }
+    }
+
     return this.prisma.client.staff.update({
       where: { id, tenantId },
-      data: updateStaffDto,
+      data: {
+        ...staffData,
+        userId,
+      },
     });
   }
 
