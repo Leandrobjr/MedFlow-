@@ -77,6 +77,12 @@ export interface Staff {
   commissionType?: string;
   commissionRate?: number;
   fixedCommission?: number;
+  userId?: string;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+  } | null;
 }
 
 export const staffService = {

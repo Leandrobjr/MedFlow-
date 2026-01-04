@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber, IsBoolean } from 'class-validator';
 import { UserRole } from '../../common/shared-types';
 
 export class CreateStaffDto {
