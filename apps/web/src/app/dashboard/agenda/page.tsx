@@ -148,7 +148,10 @@ export default function AgendaPage() {
 
       const allBlocks: ScheduleBlock[] = [];
       
-      for (const doctor of doctors) {
+      // Buscar bloqueios: todos os profissionais se admin, apenas do usuário se não admin
+      const doctorsToFetch = isAdmin ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
+      
+      for (const doctor of doctorsToFetch) {
         try {
           const blocks = await scheduleService.getBlocksByStaff(doctor.id, startDate, endDate);
           allBlocks.push(...blocks);
