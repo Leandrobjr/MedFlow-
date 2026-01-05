@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { procedureService, Procedure } from '@/services/data-service';
-import { Search, Plus, ClipboardList, DollarSign, FileText, MoreVertical, Loader2, XCircle, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, ClipboardList, DollarSign, MoreVertical, Loader2, XCircle, Edit, Trash2, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 export default function ProcedimentosPage() {
   const [procedures, setProcedures] = useState<Procedure[]>([]);
@@ -51,14 +49,21 @@ export default function ProcedimentosPage() {
     if (!formData.grossAmount.trim()) {
       errors.grossAmount = 'Valor bruto é obrigatório';
     } else {
-      const amount = parseFloat(formData.grossAmount.replace(',', '.'));
+      const amount = parseFloat(formData.grossAmount.replace(/[^\d,.-]/g, '').replace(',', '.'));
       if (isNaN(amount) || amount < 0) {
-        errors.grossAmount = 'Valor deve ser um número maior ou igual a zero';
+        errors.grossAmount = 'Valor inválido (deve ser maior ou igual a zero)';
       }
     }
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
   };
 
   const handleCreateProcedure = async (e: React.FormEvent) => {
@@ -70,9 +75,11 @@ export default function ProcedimentosPage() {
     }
     
     try {
+      const amount = parseFloat(formData.grossAmount.replace(/[^\d,.-]/g, '').replace(',', '.'));
+      
       const data = {
         name: formData.name.trim(),
-        grossAmount: parseFloat(formData.grossAmount.replace(',', '.')),
+        grossAmount: amount,
         observations: formData.observations.trim() || undefined,
       };
       
@@ -84,11 +91,11 @@ export default function ProcedimentosPage() {
         toast.success('Procedimento cadastrado com sucesso!');
       }
       
-      handleCloseModal();
+      setIsModalOpen(false);
+      resetForm();
       fetchProcedures();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao salvar procedimento';
-      toast.error(message);
+      toast.error(error.response?.data?.message || 'Erro ao salvar procedimento');
     }
   };
 
@@ -113,29 +120,25 @@ export default function ProcedimentosPage() {
       toast.success('Procedimento excluído com sucesso!');
       fetchProcedures();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao excluir procedimento';
-      toast.error(message);
+      toast.error(error.response?.data?.message || 'Erro ao excluir procedimento');
     } finally {
       setIsDeleting(null);
     }
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingProcedure(null);
+  const resetForm = () => {
     setFormData({
       name: '',
       grossAmount: '',
       observations: '',
     });
     setFormErrors({});
+    setEditingProcedure(null);
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    resetForm();
   };
 
   const filteredProcedures = procedures.filter((procedure) =>
@@ -144,96 +147,94 @@ export default function ProcedimentosPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Procedimentos</h1>
-          <p className="text-gray-600 mt-1">Gerencie os procedimentos oferecidos pela clínica</p>
+          <p className="text-gray-600 mt-1">Gerencie os procedimentos disponíveis</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+          onClick={() => {
+            resetForm();
+            setIsModalOpen(true);
+          }}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
-          <Plus className="h-5 w-5" />
+          <Plus className="h-5 w-5 mr-2" />
           Novo Procedimento
         </button>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
-            type="text"
-            placeholder="Buscar por nome..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all sm:text-sm"
-          />
-        </div>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+        <input
+          type="text"
+          placeholder="Buscar procedimento..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
       </div>
 
-      {/* Procedures List/Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        {loading ? (
-          <div className="p-20 flex flex-col items-center justify-center text-gray-400">
-            <Loader2 className="h-10 w-10 animate-spin mb-4 text-blue-500" />
-            <p>Carregando procedimentos...</p>
-          </div>
-        ) : filteredProcedures.length === 0 ? (
-          <div className="p-20 flex flex-col items-center justify-center text-gray-400 text-center">
-            <ClipboardList className="h-12 w-12 mb-4 opacity-20" />
-            <p className="text-lg font-medium text-gray-500">Nenhum procedimento encontrado</p>
-            <p className="text-sm">Tente mudar o termo de busca ou cadastre um novo procedimento.</p>
-          </div>
-        ) : (
+      {/* Procedures List */}
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      ) : filteredProcedures.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <ClipboardList className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">
+            {searchTerm ? 'Nenhum procedimento encontrado' : 'Nenhum procedimento cadastrado'}
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-bold uppercase tracking-wider">
-                  <th className="px-6 py-4">Nome</th>
-                  <th className="px-6 py-4">Valor Bruto</th>
-                  <th className="px-6 py-4">Observações</th>
-                  <th className="px-6 py-4">Ações</th>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Valor Bruto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Observações
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="bg-white divide-y divide-gray-200">
                 {filteredProcedures.map((procedure) => (
-                  <tr key={procedure.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3">
-                          {procedure.name.charAt(0)}
-                        </div>
-                        <div className="font-semibold text-gray-900">{procedure.name}</div>
-                      </div>
+                  <tr key={procedure.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{procedure.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{formatCurrency(procedure.grossAmount)}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center text-green-600 font-semibold">
-                        <DollarSign className="h-4 w-4 mr-1" />
-                        {formatCurrency(procedure.grossAmount)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600 max-w-md truncate">
+                      <div className="text-sm text-gray-500 max-w-md truncate">
                         {procedure.observations || '-'}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <button 
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end items-center gap-2">
+                        <button
                           onClick={() => handleEdit(procedure)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
+                          className="text-blue-600 hover:text-blue-900 p-1"
                           title="Editar"
                         >
                           <Edit className="h-5 w-5" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDelete(procedure.id)}
                           disabled={isDeleting === procedure.id}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50" 
+                          className="text-red-600 hover:text-red-900 p-1 disabled:opacity-50"
                           title="Excluir"
                         >
                           {isDeleting === procedure.id ? (
@@ -249,97 +250,99 @@ export default function ProcedimentosPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Modal Novo Procedimento */}
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">
-                {editingProcedure ? 'Editar Procedimento' : 'Novo Procedimento'}
-              </h2>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                <XCircle className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleCreateProcedure} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Procedimento <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
-                    if (formErrors.name) setFormErrors({ ...formErrors, name: '' });
-                  }}
-                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                    formErrors.name ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Ex: Consulta médica"
-                />
-                {formErrors.name && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.name}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor Bruto (R$) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.grossAmount}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^\d,]/g, '');
-                    setFormData({ ...formData, grossAmount: value });
-                    if (formErrors.grossAmount) setFormErrors({ ...formErrors, grossAmount: '' });
-                  }}
-                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                    formErrors.grossAmount ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="0,00"
-                />
-                {formErrors.grossAmount && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.grossAmount}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observações
-                </label>
-                <textarea
-                  value={formData.observations}
-                  onChange={(e) => setFormData({ ...formData, observations: e.target.value })}
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
-                  placeholder="Informações adicionais sobre o procedimento..."
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {editingProcedure ? 'Editar Procedimento' : 'Novo Procedimento'}
+                </h2>
                 <button
-                  type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                  className="text-gray-400 hover:text-gray-600"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
-                >
-                  {editingProcedure ? 'Atualizar' : 'Cadastrar'}
+                  <XCircle className="h-6 w-6" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleCreateProcedure} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nome do Procedimento <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      formErrors.name ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Ex: Consulta médica"
+                  />
+                  {formErrors.name && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.name}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Valor Bruto (R$) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <input
+                      type="text"
+                      value={formData.grossAmount}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^\d,.-]/g, '');
+                        setFormData({ ...formData, grossAmount: value });
+                      }}
+                      className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        formErrors.grossAmount ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  {formErrors.grossAmount && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.grossAmount}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observações
+                  </label>
+                  <textarea
+                    value={formData.observations}
+                    onChange={(e) => setFormData({ ...formData, observations: e.target.value })}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Informações adicionais sobre o procedimento..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    {editingProcedure ? 'Atualizar' : 'Cadastrar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
