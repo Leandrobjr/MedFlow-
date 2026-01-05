@@ -5,6 +5,7 @@ import { appointmentService, Appointment } from '@/services/appointment-service'
 import { patientService, staffService, Patient, Staff } from '@/services/data-service';
 import { scheduleService, ScheduleConfig, ScheduleBlock } from '@/services/schedule-service';
 import { calculateDayAvailability, calculatePeriodAvailability, DayAvailability } from '@/lib/availability-utils';
+import { useAuth } from '@/hooks/use-auth';
 import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings, Grid3x3, CalendarDays, List } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays, subDays, startOfDay, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, addWeeks, subWeeks, addMonths, subMonths, getWeek, isToday, parseISO } from 'date-fns';
@@ -14,6 +15,10 @@ import toast from 'react-hot-toast';
 type ViewType = 'day' | 'week' | 'month';
 
 export default function AgendaPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const userStaffId = user?.staffId || null;
+  
   const [view, setView] = useState<ViewType>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -59,10 +64,16 @@ export default function AgendaPage() {
         params.endDate = format(monthEnd, 'yyyy-MM-dd');
       }
       
-      // Apenas adicionar doctorId se um profissional específico foi selecionado
-      if (selectedStaffId && selectedStaffId.trim() !== '') {
+      // Se não for admin, usar staffId do usuário logado automaticamente
+      // Se for admin, permitir filtrar por profissional específico se selecionado
+      if (!isAdmin && userStaffId) {
+        // Profissional vê apenas suas próprias agendas
+        params.doctorId = userStaffId;
+      } else if (isAdmin && selectedStaffId && selectedStaffId.trim() !== '') {
+        // Admin pode filtrar por profissional específico
         params.doctorId = selectedStaffId;
       }
+      // Se for admin e não tiver selecionado nenhum profissional, não passa doctorId (vê todos)
       
       const data = await appointmentService.getAll(params);
       setAppointments(data || []);
@@ -90,10 +101,11 @@ export default function AgendaPage() {
 
   const fetchScheduleConfigs = async () => {
     try {
-      // Buscar configurações para todos os profissionais
+      // Buscar configurações: todos os profissionais se admin, apenas do usuário se não admin
       const configs: ScheduleConfig[] = [];
+      const doctorsToFetch = isAdmin ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
       
-      for (const doctor of doctors) {
+      for (const doctor of doctorsToFetch) {
         try {
           const config = await scheduleService.getConfigByStaff(doctor.id);
           if (config) {
@@ -194,7 +206,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     fetchAppointments();
-  }, [selectedDate, view, selectedStaffId]);
+  }, [selectedDate, view, selectedStaffId, isAdmin, userStaffId]);
 
   useEffect(() => {
     fetchInitialData();
@@ -205,14 +217,14 @@ export default function AgendaPage() {
       fetchScheduleConfigs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctors]);
+  }, [doctors, isAdmin, userStaffId]);
 
   useEffect(() => {
     if (doctors.length > 0) {
       fetchScheduleBlocks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctors, selectedDate, view]);
+  }, [doctors, selectedDate, view, isAdmin, userStaffId]);
 
   useEffect(() => {
     setDayAvailability(calculatedDayAvailability);
@@ -584,7 +596,10 @@ export default function AgendaPage() {
 
                       // Buscar bloqueios para este dia e hora
                       const dayBlocks = scheduleBlocks.filter(block => {
-                        if (block.staffId !== selectedStaffId && selectedStaffId !== '') return false;
+                        // Se não for admin, mostrar apenas blocos do próprio profissional
+                        if (!isAdmin && userStaffId && block.staffId !== userStaffId) return false;
+                        // Se for admin e tiver filtro selecionado, aplicar filtro
+                        if (isAdmin && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
                         
                         // Parsear data do bloqueio sem timezone (YYYY-MM-DD)
                         const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
@@ -717,7 +732,10 @@ export default function AgendaPage() {
 
                 // Verificar se há bloqueio de dia inteiro
                 const hasFullDayBlock = scheduleBlocks.some(block => {
-                  if (block.staffId !== selectedStaffId && selectedStaffId !== '') return false;
+                  // Se não for admin, mostrar apenas blocos do próprio profissional
+                  if (!isAdmin && userStaffId && block.staffId !== userStaffId) return false;
+                  // Se for admin e tiver filtro selecionado, aplicar filtro
+                  if (isAdmin && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
                   if (block.blockType !== 'date') return false;
                   
                   const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
@@ -854,22 +872,31 @@ export default function AgendaPage() {
             </button>
           </div>
 
-          {/* Filtro por Profissional */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700">Filtrar por:</label>
-            <select
-              value={selectedStaffId}
-              onChange={(e) => setSelectedStaffId(e.target.value)}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Todos os profissionais</option>
-              {doctors.map((doctor) => (
-                <option key={doctor.id} value={doctor.id}>
-                  {doctor.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Filtro por Profissional - Apenas para Admin */}
+          {isAdmin && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Filtrar por:</label>
+              <select
+                value={selectedStaffId}
+                onChange={(e) => setSelectedStaffId(e.target.value)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todos os profissionais</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!isAdmin && userStaffId && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">
+                Sua agenda
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Navegação de Data */}
