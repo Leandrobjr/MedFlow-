@@ -86,15 +86,44 @@ export class StaffService {
       data.userId = createStaffDto.userId;
     }
 
-    return this.prisma.client.staff.create({
-      data,
+    // Extrair procedureIds para gerenciar relacionamento
+    const { procedureIds, ...staffCreateData } = data;
+
+    // Criar staff com ou sem relacionamento de procedimentos
+    const staff = await this.prisma.client.staff.create({
+      data: {
+        ...staffCreateData,
+        staffProcedures: procedureIds && procedureIds.length > 0
+          ? {
+              create: procedureIds.map((procedureId: string) => ({
+                procedureId,
+              })),
+            }
+          : undefined,
+      },
+      include: {
+        staffProcedures: {
+          include: {
+            procedure: true,
+          },
+        },
+      },
     });
+
+    return staff;
   }
 
   async findAll(tenantId: string) {
     return this.prisma.client.staff.findMany({
       where: { tenantId },
-      include: { user: true },
+      include: { 
+        user: true,
+        staffProcedures: {
+          include: {
+            procedure: true,
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -102,12 +131,19 @@ export class StaffService {
   async findOne(tenantId: string, id: string) {
     return this.prisma.client.staff.findFirst({
       where: { id, tenantId },
-      include: { user: true },
+      include: { 
+        user: true,
+        staffProcedures: {
+          include: {
+            procedure: true,
+          },
+        },
+      },
     });
   }
 
   async update(tenantId: string, id: string, updateStaffDto: any) {
-    const { password, createAccount, ...staffData } = updateStaffDto;
+    const { password, createAccount, procedureIds, ...staffData } = updateStaffDto;
     
     // Buscar staff atual
     const staff = await this.prisma.client.staff.findFirst({
@@ -161,11 +197,37 @@ export class StaffService {
       }
     }
 
+    // Gerenciar relacionamento de procedimentos se procedureIds foi fornecido
+    if (procedureIds !== undefined) {
+      // Remover todos os relacionamentos existentes
+      await this.prisma.client.staffProcedure.deleteMany({
+        where: { staffId: id },
+      });
+
+      // Criar novos relacionamentos se houver procedimentos
+      if (procedureIds && procedureIds.length > 0) {
+        await this.prisma.client.staffProcedure.createMany({
+          data: procedureIds.map((procedureId: string) => ({
+            staffId: id,
+            procedureId,
+          })),
+        });
+      }
+    }
+
     return this.prisma.client.staff.update({
       where: { id, tenantId },
       data: {
         ...staffData,
         userId,
+      },
+      include: {
+        user: true,
+        staffProcedures: {
+          include: {
+            procedure: true,
+          },
+        },
       },
     });
   }
