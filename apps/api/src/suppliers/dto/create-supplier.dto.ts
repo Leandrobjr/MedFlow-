@@ -7,5 +7,5 @@ export class CreateSupplierDto {
 
   @IsString()
   @IsOptional()
-  contactInfo?: string;
+  contactInfo?: string; // JSON string com telefone, email, endereço, etc
 }

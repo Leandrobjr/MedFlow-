@@ -15,6 +15,7 @@ import { FinanceModule } from './finance/finance.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
