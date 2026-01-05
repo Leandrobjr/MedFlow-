@@ -10,6 +10,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  staffId?: string | null;
 }
 
 interface AuthContextType {
