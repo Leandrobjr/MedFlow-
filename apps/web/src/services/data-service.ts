@@ -83,6 +83,10 @@ export interface Staff {
     email: string;
     name: string;
   } | null;
+  staffProcedures?: Array<{
+    procedureId: string;
+    procedure?: Procedure;
+  }>;
 }
 
 export const staffService = {

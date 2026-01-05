@@ -155,7 +155,7 @@ export default function EquipePage() {
   const handleEdit = (member: Staff) => {
     setEditingStaff(member);
     // Extrair IDs de procedimentos do relacionamento staffProcedures
-    const procedureIds = (member as any).staffProcedures?.map((sp: any) => sp.procedureId) || [];
+    const procedureIds = member.staffProcedures?.map((sp) => sp.procedureId) || [];
     setFormData({
       name: member.name || '',
       email: member.email || '',
