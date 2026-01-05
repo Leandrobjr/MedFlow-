@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { staffService, Staff } from '@/services/data-service';
+import { staffService, procedureService, Staff, Procedure } from '@/services/data-service';
 import { UserCog, Plus, Stethoscope, Mail, Phone, MoreVertical, Loader2, XCircle, Percent, DollarSign, Award, Edit, Trash2, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatPhone, validatePhone, validateEmail } from '@/lib/validations';
@@ -23,6 +23,7 @@ const PROFESSIONAL_ROLES = [
 
 export default function EquipePage() {
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
@@ -44,6 +45,7 @@ export default function EquipePage() {
     fixedCommission: 0,
     password: '',
     createAccount: false,
+    procedureIds: [] as string[],
   });
   
   // Form errors
@@ -61,8 +63,18 @@ export default function EquipePage() {
     }
   };
 
+  const fetchProcedures = async () => {
+    try {
+      const data = await procedureService.getAll();
+      setProcedures(data);
+    } catch (error) {
+      console.error('Erro ao carregar procedimentos:', error);
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
+    fetchProcedures();
   }, []);
 
   const validateForm = (): boolean => {
@@ -120,6 +132,7 @@ export default function EquipePage() {
         phone: formData.phone ? formData.phone.replace(/\D/g, '') : undefined,
         commissionRate: formData.commissionType === 'PERCENTAGE' ? Number(formData.commissionRate) : 0,
         fixedCommission: formData.commissionType === 'FIXED' ? Number(formData.fixedCommission) : 0,
+        procedureIds: formData.procedureIds.length > 0 ? formData.procedureIds : undefined,
       };
 
       if (editingStaff) {
@@ -141,6 +154,8 @@ export default function EquipePage() {
 
   const handleEdit = (member: Staff) => {
     setEditingStaff(member);
+    // Extrair IDs de procedimentos do relacionamento staffProcedures
+    const procedureIds = (member as any).staffProcedures?.map((sp: any) => sp.procedureId) || [];
     setFormData({
       name: member.name || '',
       email: member.email || '',
@@ -156,6 +171,7 @@ export default function EquipePage() {
       fixedCommission: member.fixedCommission ? Number(member.fixedCommission) : 0,
       password: '',
       createAccount: false,
+      procedureIds,
     });
     setIsModalOpen(true);
   };
@@ -184,10 +200,23 @@ export default function EquipePage() {
       rqe: '', rqeState: 'SP',
       commissionType: 'PERCENTAGE',
       commissionRate: 0, fixedCommission: 0,
-      password: '', createAccount: false
+      password: '', createAccount: false,
+      procedureIds: []
     });
     setFormErrors({});
     setEditingStaff(null);
+  };
+
+  const handleProcedureToggle = (procedureId: string) => {
+    setFormData(prev => {
+      const isSelected = prev.procedureIds.includes(procedureId);
+      return {
+        ...prev,
+        procedureIds: isSelected
+          ? prev.procedureIds.filter(id => id !== procedureId)
+          : [...prev.procedureIds, procedureId]
+      };
+    });
   };
 
   const handleCloseModal = () => {
