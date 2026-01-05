@@ -28,6 +28,8 @@ model Tenant {
   medicalFees    MedicalFee[]
   scheduleConfigs ScheduleConfig[]
   scheduleBlocks ScheduleBlock[]
+  procedures     Procedure[]
+  suppliers      Supplier[]
 
   @@map("tenants")
 }
@@ -104,6 +106,7 @@ model Staff {
   medicalFees    MedicalFee[]
   scheduleConfig ScheduleConfig?
   scheduleBlocks ScheduleBlock[]
+  staffProcedures StaffProcedure[]
 
   @@map("staff")
 }
@@ -299,4 +302,51 @@ model ScheduleBlock {
 
   @@index([staffId, startDate])
   @@map("schedule_blocks")
+}
+
+// Cadastro de Procedimentos
+model Procedure {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  grossAmount   Decimal  @map("gross_amount") @db.Decimal(10, 2)
+  observations  String?  @db.Text
+  tenantId      String   @map("tenant_id") @db.Uuid
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  staffProcedures StaffProcedure[]
+
+  @@map("procedures")
+}
+
+// Cadastro de Fornecedores
+model Supplier {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  contactInfo   String?  @map("contact_info") @db.Text // JSON string com telefone, email, endereço, etc
+  tenantId      String   @map("tenant_id") @db.Uuid
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("suppliers")
+}
+
+// Relacionamento Many-to-Many: Staff ↔ Procedures
+model StaffProcedure {
+  id          String   @id @default(uuid()) @db.Uuid
+  staffId     String   @map("staff_id") @db.Uuid
+  procedureId String   @map("procedure_id") @db.Uuid
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  staff       Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  procedure   Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, procedureId])
+  @@map("staff_procedures")
 }

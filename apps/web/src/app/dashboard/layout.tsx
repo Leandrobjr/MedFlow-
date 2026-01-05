@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User, LayoutDashboard, Calendar, Users, FileText, Settings, DollarSign, Menu, X, UserCog } from 'lucide-react';
+import { LogOut, User, LayoutDashboard, Calendar, Users, FileText, Settings, DollarSign, Menu, X, UserCog, ChevronDown, ChevronRight, FolderOpen, Package, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -12,6 +12,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [hasRedirected, setHasRedirected] = React.useState(false);
+  const [expandedMenuGroups, setExpandedMenuGroups] = React.useState<Set<string>>(new Set(['cadastros'])); // CADASTROS expandido por padrão
 
   // Redirecionar para login se não estiver autenticado
   React.useEffect(() => {
@@ -33,15 +34,121 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Início', href: '/dashboard' },
-    { icon: Calendar, label: 'Agenda', href: '/dashboard/agenda' },
-    { icon: Users, label: 'Pacientes', href: '/dashboard/pacientes' },
-    { icon: UserCog, label: 'Equipe', href: '/dashboard/equipe' },
-    { icon: FileText, label: 'Prontuários (PEP)', href: '/dashboard/pep' },
-    { icon: DollarSign, label: 'Financeiro', href: '/dashboard/financeiro' },
-    { icon: Settings, label: 'Configurações', href: '/dashboard/configuracoes' },
+  type MenuItem = {
+    type: 'item';
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    href: string;
+  };
+
+  type MenuGroup = {
+    type: 'group';
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    key: string;
+    items: MenuItem[];
+  };
+
+  const menuStructure: (MenuItem | MenuGroup)[] = [
+    { type: 'item', icon: LayoutDashboard, label: 'Início', href: '/dashboard' },
+    { type: 'item', icon: Calendar, label: 'Agenda', href: '/dashboard/agenda' },
+    {
+      type: 'group',
+      icon: FolderOpen,
+      label: 'CADASTROS',
+      key: 'cadastros',
+      items: [
+        { type: 'item', icon: Users, label: 'Pacientes', href: '/dashboard/pacientes' },
+        { type: 'item', icon: UserCog, label: 'Equipe', href: '/dashboard/equipe' },
+        { type: 'item', icon: ClipboardList, label: 'Procedimentos', href: '/dashboard/cadastros/procedimentos' },
+        { type: 'item', icon: Package, label: 'Fornecedores', href: '/dashboard/cadastros/fornecedores' },
+      ],
+    },
+    { type: 'item', icon: FileText, label: 'Prontuários (PEP)', href: '/dashboard/pep' },
+    { type: 'item', icon: DollarSign, label: 'Financeiro', href: '/dashboard/financeiro' },
+    { type: 'item', icon: Settings, label: 'Configurações', href: '/dashboard/configuracoes' },
   ];
+
+  const toggleMenuGroup = (key: string) => {
+    setExpandedMenuGroups((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const isMenuItemActive = (href: string) => {
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+
+  const isMenuGroupActive = (group: MenuGroup) => {
+    return group.items.some((item) => isMenuItemActive(item.href));
+  };
+
+  const renderMenuItem = (item: MenuItem) => {
+    const isActive = isMenuItemActive(item.href);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+          isActive
+            ? 'bg-blue-50 text-blue-600'
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        }`}
+      >
+        <item.icon className="h-5 w-5 mr-3" />
+        {item.label}
+      </Link>
+    );
+  };
+
+  const renderMenuGroup = (group: MenuGroup) => {
+    const isExpanded = expandedMenuGroups.has(group.key);
+    const isActive = isMenuGroupActive(group);
+    const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
+
+    return (
+      <div key={group.key}>
+        <button
+          onClick={() => toggleMenuGroup(group.key)}
+          className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+            isActive
+              ? 'bg-blue-50 text-blue-600'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          }`}
+        >
+          <div className="flex items-center">
+            <group.icon className="h-5 w-5 mr-3" />
+            {group.label}
+          </div>
+          <ChevronIcon className="h-4 w-4" />
+        </button>
+        {isExpanded && (
+          <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors ${
+                  isMenuItemActive(item.href)
+                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <item.icon className="h-4 w-4 mr-3" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -52,20 +159,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
-                pathname === item.href 
-                  ? 'bg-blue-50 text-blue-600' 
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="h-5 w-5 mr-3" />
-              {item.label}
-            </Link>
-          ))}
+          {menuStructure.map((item) =>
+            item.type === 'item' ? renderMenuItem(item) : renderMenuGroup(item)
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-200">
@@ -120,21 +216,63 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              onClick={() => setIsSidebarOpen(false)}
-              className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
-                pathname === item.href 
-                  ? 'bg-blue-50 text-blue-600' 
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="h-5 w-5 mr-3" />
-              {item.label}
-            </Link>
-          ))}
+          {menuStructure.map((item) =>
+            item.type === 'item' ? (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsSidebarOpen(false)}
+                className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                  isMenuItemActive(item.href)
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <item.icon className="h-5 w-5 mr-3" />
+                {item.label}
+              </Link>
+            ) : (
+              <div key={item.key}>
+                <button
+                  onClick={() => toggleMenuGroup(item.key)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                    isMenuGroupActive(item)
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <item.icon className="h-5 w-5 mr-3" />
+                    {item.label}
+                  </div>
+                  {expandedMenuGroups.has(item.key) ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+                {expandedMenuGroups.has(item.key) && (
+                  <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
+                    {item.items.map((subItem) => (
+                      <Link
+                        key={subItem.href}
+                        href={subItem.href}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors ${
+                          isMenuItemActive(subItem.href)
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <subItem.icon className="h-4 w-4 mr-3" />
+                        {subItem.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          )}
         </nav>
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center px-4 py-3 mb-2">
