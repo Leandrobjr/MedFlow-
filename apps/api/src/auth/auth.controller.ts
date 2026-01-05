@@ -82,8 +82,12 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@Req() request: Request) {
-    const user = request['user'];
+  async me(@Req() req: any) {
+    const user = req.user;
+    
+    if (!user || !user.id) {
+      throw new UnauthorizedException('Usuário não autenticado');
+    }
     
     // Buscar staffId se o usuário tiver um Staff vinculado
     const staff = await this.prisma.client.staff.findUnique({
