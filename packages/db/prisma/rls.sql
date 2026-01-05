@@ -9,6 +9,8 @@ ALTER TABLE "medical_records" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "transactions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "daily_closures" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "medical_fees" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "procedures" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "suppliers" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Criar política de isolamento para as tabelas
 -- Esta política impede que um tenant acesse dados de outro tenant.
@@ -52,4 +54,14 @@ USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
 -- Política para medical_fees
 DROP POLICY IF EXISTS tenant_isolation_policy ON "medical_fees";
 CREATE POLICY tenant_isolation_policy ON "medical_fees"
+USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
+
+-- Política para procedures
+DROP POLICY IF EXISTS tenant_isolation_policy ON "procedures";
+CREATE POLICY tenant_isolation_policy ON "procedures"
+USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
+
+-- Política para suppliers
+DROP POLICY IF EXISTS tenant_isolation_policy ON "suppliers";
+CREATE POLICY tenant_isolation_policy ON "suppliers"
 USING ("tenant_id" = current_setting('medflow.current_tenant')::uuid);
