@@ -1,18 +1,103 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
-import { Calendar, Users, DollarSign, ArrowUpRight, ArrowDownRight, Clock } from 'lucide-react';
-import { format } from 'date-fns';
+import { appointmentService, Appointment } from '@/services/appointment-service';
+import { patientService } from '@/services/data-service';
+import { Calendar, Clock, MessageSquare, Play, X, Loader2 } from 'lucide-react';
+import { format, formatDistanceToNow, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentsCount, setAppointmentsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
-  const stats = [
-    { label: 'Consultas Hoje', value: '12', icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-50', change: '+20%', positive: true },
-    { label: 'Novos Pacientes', value: '4', icon: Users, color: 'text-green-600', bg: 'bg-green-50', change: '+10%', positive: true },
-    { label: 'Faturamento (Mês)', value: 'R$ 15.400', icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50', change: '-5%', positive: false },
-  ];
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [user]);
+
+  const fetchAppointments = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      // Buscar consultas do dia
+      const data = await appointmentService.getAll({ date: today });
+      setAppointments(data);
+      setAppointmentsCount(data.length);
+    } catch (error) {
+      console.error('Erro ao carregar consultas:', error);
+      toast.error('Erro ao carregar consultas do dia');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartAppointment = async (appointmentId: string) => {
+    setUpdatingStatus(appointmentId);
+    try {
+      await appointmentService.updateStatus(appointmentId, 'in_progress');
+      toast.success('Atendimento iniciado!');
+      fetchAppointments();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao iniciar atendimento');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const handleCancelAppointment = async (appointmentId: string) => {
+    if (!confirm('Tem certeza que deseja cancelar este atendimento?')) {
+      return;
+    }
+
+    setUpdatingStatus(appointmentId);
+    try {
+      await appointmentService.updateStatus(appointmentId, 'cancelled');
+      toast.success('Atendimento cancelado!');
+      fetchAppointments();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao cancelar atendimento');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusLower = status.toLowerCase();
+    const statusMap: Record<string, { label: string; bg: string; text: string }> = {
+      scheduled: { label: 'Agendado', bg: 'bg-blue-50', text: 'text-blue-700' },
+      confirmed: { label: 'Confirmado', bg: 'bg-green-50', text: 'text-green-700' },
+      in_progress: { label: 'Em Atendimento', bg: 'bg-yellow-50', text: 'text-yellow-700' },
+      completed: { label: 'Concluído', bg: 'bg-gray-50', text: 'text-gray-700' },
+      cancelled: { label: 'Cancelado', bg: 'bg-red-50', text: 'text-red-700' },
+      canceled: { label: 'Cancelado', bg: 'bg-red-50', text: 'text-red-700' },
+    };
+
+    const statusInfo = statusMap[statusLower] || { label: status, bg: 'bg-gray-50', text: 'text-gray-700' };
+    
+    return (
+      <div className={`px-3 py-1 ${statusInfo.bg} ${statusInfo.text} text-[10px] font-bold rounded-full uppercase`}>
+        {statusInfo.label}
+      </div>
+    );
+  };
+
+  const getAppointmentType = (appointment: Appointment) => {
+    // Usar campo type se existir, senão usar default
+    const type = appointment.type || 'Consulta de Rotina';
+    // Capitalizar primeira letra
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  };
 
   return (
     <div className="space-y-8">
@@ -25,22 +110,34 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-xl ${stat.bg}`}>
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
-              </div>
-              <div className={`flex items-center text-xs font-bold ${stat.positive ? 'text-green-600' : 'text-red-600'}`}>
-                {stat.positive ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-                {stat.change}
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Consultas Hoje */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-blue-50">
+              <Calendar className="h-6 w-6 text-blue-600" />
             </div>
-            <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
           </div>
-        ))}
+          <p className="text-sm font-medium text-gray-500">Consultas Hoje</p>
+          {loading ? (
+            <div className="flex items-center mt-2">
+              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <p className="text-2xl font-bold text-gray-900 mt-1">{appointmentsCount}</p>
+          )}
+        </div>
+
+        {/* Espaço para CHAT (futuro) */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md border-dashed">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-purple-50">
+              <MessageSquare className="h-6 w-6 text-purple-600" />
+            </div>
+          </div>
+          <p className="text-sm font-medium text-gray-500">Chat</p>
+          <p className="text-sm text-gray-400 mt-1 italic">Em breve</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -51,21 +148,86 @@ export default function DashboardPage() {
               <Clock className="h-5 w-5 mr-2 text-blue-600" />
               Próximas Consultas
             </h3>
-            <button className="text-sm font-medium text-blue-600 hover:text-blue-700">Ver todas</button>
+            <button 
+              onClick={() => router.push('/dashboard/agenda')}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              Ver todas
+            </button>
           </div>
-          <div className="divide-y divide-gray-100">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-                <div className="text-sm font-bold text-gray-400">09:00</div>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">Paciente de Exemplo {i}</p>
-                  <p className="text-xs text-gray-500">Consulta de Rotina</p>
-                </div>
-                <div className="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full uppercase">
-                  Pendente
-                </div>
+          <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+            {loading ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto" />
+                <p className="text-sm text-gray-500 mt-2">Carregando consultas...</p>
               </div>
-            ))}
+            ) : appointments.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 italic">
+                Nenhuma consulta agendada para hoje.
+              </div>
+            ) : (
+              appointments.map((appointment) => {
+                const startTime = parseISO(appointment.startTime);
+                const statusLower = appointment.status.toLowerCase();
+                const canStart = statusLower === 'confirmed';
+                const canCancel = statusLower !== 'completed' && statusLower !== 'cancelled' && statusLower !== 'canceled';
+
+                return (
+                  <div key={appointment.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start gap-4">
+                      <div className="text-sm font-bold text-gray-400 min-w-[60px]">
+                        {format(startTime, 'HH:mm')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">
+                          {appointment.patient?.name || 'Paciente'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {getAppointmentType(appointment)}
+                        </p>
+                        {appointment.staff && (
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {appointment.staff.name}
+                            {appointment.staff.specialty && ` - ${appointment.staff.specialty}`}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {getStatusBadge(appointment.status)}
+                          {canStart && (
+                            <button
+                              onClick={() => handleStartAppointment(appointment.id)}
+                              disabled={updatingStatus === appointment.id}
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {updatingStatus === appointment.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <Play className="h-3 w-3 mr-1" />
+                              )}
+                              Iniciar
+                            </button>
+                          )}
+                          {canCancel && (
+                            <button
+                              onClick={() => handleCancelAppointment(appointment.id)}
+                              disabled={updatingStatus === appointment.id}
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {updatingStatus === appointment.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <X className="h-3 w-3 mr-1" />
+                              )}
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

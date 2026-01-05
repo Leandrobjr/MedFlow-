@@ -21,7 +21,7 @@ export class AppointmentsService {
       where: {
         tenantId,
         staffId,
-        status: { not: 'cancelled' },
+        status: { notIn: ['cancelled', 'canceled'] },
         OR: [
           {
             startTime: { lt: end },
@@ -92,7 +92,10 @@ export class AppointmentsService {
         staff: { select: { id: true, name: true, specialty: true } },
       },
       orderBy: { startTime: 'asc' },
-    });
+    }).then(appointments => appointments.map(apt => ({
+      ...apt,
+      type: apt.type || 'consultation', // Garantir que type sempre existe
+    })));
   }
 
   async findOne(tenantId: string, id: string) {
@@ -106,9 +109,17 @@ export class AppointmentsService {
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {
+    // Validar status permitidos
+    const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'canceled'];
+    const normalizedStatus = status.toLowerCase();
+    
+    if (!allowedStatuses.includes(normalizedStatus)) {
+      throw new BadRequestException(`Status inválido. Valores permitidos: ${allowedStatuses.join(', ')}`);
+    }
+
     return this.prisma.client.appointment.update({
       where: { id, tenantId },
-      data: { status },
+      data: { status: normalizedStatus },
     });
   }
 

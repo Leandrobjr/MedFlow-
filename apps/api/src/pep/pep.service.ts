@@ -77,13 +77,24 @@ export class PepService {
       return record;
     }
 
-    return this.prisma.client.medicalRecord.update({
+    // Atualizar prontuário e mudar status do appointment para completed
+    const updatedRecord = await this.prisma.client.medicalRecord.update({
       where: { id, tenantId },
       data: {
         isFinalized: true,
         finalizedAt: new Date(),
       },
     });
+
+    // Atualizar status do appointment para completed
+    if (record.appointmentId) {
+      await this.prisma.client.appointment.update({
+        where: { id: record.appointmentId },
+        data: { status: 'completed' },
+      });
+    }
+
+    return updatedRecord;
   }
 
   async addAddendum(tenantId: string, recordId: string, dto: CreateAddendumDto) {

@@ -322,4 +322,24 @@
 ---
 
 **Última atualização**: Janeiro 2025  
-**Próximo passo**: Decisão sobre relacionamento Appointment ↔ Procedure
+
+---
+
+## ✅ DECISÕES TOMADAS (Após análise com usuário)
+
+**Respostas:**
+1. **Procedure**: NÃO é essencial mostrar nome do procedimento cadastrado → **Usar campo `type` existente (Opção B)**
+2. **Status**: SIM, rastrear "em andamento" separadamente → **Adicionar status `in_progress`**
+   - Fluxo: `scheduled → confirmed → in_progress → completed`
+   - `in_progress` inicia quando confirma faturamento/pagamento
+   - `completed` só quando profissional finaliza prontuário (PEP)
+3. **Novos Pacientes**: Apenas somatório de pacientes cadastrados HOJE na clínica (não "do profissional") → **Retirar campo da página do profissional**
+4. **Filtros**: Dashboard mostra dados do profissional logado, EXCETO se for admin (mostra todos do tenant)
+
+**Plano Final:**
+- ✅ **Implementar AGORA**: Remover FATURAMENTO, adicionar CHAT placeholder, integrar dados reais, botões de ação
+- ✅ **Adicionar**: Status `in_progress` no backend e frontend
+- ✅ **Usar**: Campo `type` existente para mostrar tipo de consulta/procedimento
+- ✅ **Filtrar**: Por profissional logado (ou todos se admin)
+
+**Estimativa Final (apenas itens necessários)**: 10-12 horas (1.5-2 dias)

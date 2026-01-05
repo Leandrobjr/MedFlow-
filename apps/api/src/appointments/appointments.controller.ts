@@ -32,7 +32,15 @@ export class AppointmentsController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.appointmentsService.findAll(req.tenantId, doctorId, date, startDate, endDate);
+    // Se não for admin/owner e não tiver doctorId explícito, filtrar por staffId do usuário logado
+    const userRole = req.user?.role;
+    const isAdmin = userRole === 'admin' || userRole === 'owner';
+    const userStaffId = req.user?.staffId;
+    
+    // Se não for admin e não passou doctorId, usar staffId do usuário logado
+    const finalDoctorId = doctorId || (!isAdmin && userStaffId ? userStaffId : undefined);
+    
+    return this.appointmentsService.findAll(req.tenantId, finalDoctorId, date, startDate, endDate);
   }
 
   @Get(':id')

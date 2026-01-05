@@ -14,10 +14,14 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/shared-types';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -80,7 +84,17 @@ export class AuthController {
   @Get('me')
   async me(@Req() request: Request) {
     const user = request['user'];
-    return user;
+    
+    // Buscar staffId se o usuário tiver um Staff vinculado
+    const staff = await this.prisma.client.staff.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    return {
+      ...user,
+      staffId: staff?.id || null,
+    };
   }
 
   @Post('logout')

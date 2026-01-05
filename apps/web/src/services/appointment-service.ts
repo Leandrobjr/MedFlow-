@@ -7,7 +7,8 @@ export interface Appointment {
   doctorId?: string; // Alias para staffId para compatibilidade
   startTime: string;
   endTime: string;
-  status: 'scheduled' | 'confirmed' | 'canceled' | 'completed' | 'PENDING' | 'CONFIRMED' | 'CANCELED' | 'COMPLETED' | 'NOSHOW';
+  status: 'scheduled' | 'confirmed' | 'in_progress' | 'canceled' | 'completed' | 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'CANCELED' | 'COMPLETED' | 'NOSHOW';
+  type?: string; // Tipo de consulta/procedimento
   observations?: string;
   notes?: string; // Alias para observations
   patient: {
