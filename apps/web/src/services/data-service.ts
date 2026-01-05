@@ -111,3 +111,86 @@ export const staffService = {
   }
 };
 
+export interface Procedure {
+  id: string;
+  name: string;
+  grossAmount: number;
+  observations?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const procedureService = {
+  getAll: async () => {
+    const response = await api.get<Procedure[]>('/procedures');
+    return response.data;
+  },
+  
+  getById: async (id: string) => {
+    const response = await api.get<Procedure>(`/procedures/${id}`);
+    return response.data;
+  },
+  
+  create: async (data: {
+    name: string;
+    grossAmount: number;
+    observations?: string;
+  }) => {
+    const response = await api.post<Procedure>('/procedures', data);
+    return response.data;
+  },
+  
+  update: async (id: string, data: Partial<{
+    name: string;
+    grossAmount: number;
+    observations?: string;
+  }>) => {
+    const response = await api.patch<Procedure>(`/procedures/${id}`, data);
+    return response.data;
+  },
+  
+  delete: async (id: string) => {
+    await api.delete(`/procedures/${id}`);
+  }
+};
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactInfo?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const supplierService = {
+  getAll: async () => {
+    const response = await api.get<Supplier[]>('/suppliers');
+    return response.data;
+  },
+  
+  getById: async (id: string) => {
+    const response = await api.get<Supplier>(`/suppliers/${id}`);
+    return response.data;
+  },
+  
+  create: async (data: {
+    name: string;
+    contactInfo?: string;
+  }) => {
+    const response = await api.post<Supplier>('/suppliers', data);
+    return response.data;
+  },
+  
+  update: async (id: string, data: Partial<{
+    name: string;
+    contactInfo?: string;
+  }>) => {
+    const response = await api.patch<Supplier>(`/suppliers/${id}`, data);
+    return response.data;
+  },
+  
+  delete: async (id: string) => {
+    await api.delete(`/suppliers/${id}`);
+  }
+};
+
