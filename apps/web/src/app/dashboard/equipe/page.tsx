@@ -590,6 +590,42 @@ export default function EquipePage() {
                   </div>
                 )}
 
+                {/* Procedimentos Realizados */}
+                <div className="md:col-span-2 space-y-4">
+                  <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-50 pb-2">
+                    Procedimentos Realizados
+                  </h3>
+                  <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <p className="text-xs text-gray-600 mb-3">
+                      Selecione os procedimentos que este profissional realiza
+                    </p>
+                    {procedures.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic">
+                        Nenhum procedimento cadastrado. Cadastre procedimentos primeiro.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                        {procedures.map((procedure) => (
+                          <label
+                            key={procedure.id}
+                            className="flex items-center p-2 hover:bg-white rounded-lg cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.procedureIds.includes(procedure.id)}
+                              onChange={() => handleProcedureToggle(procedure.id)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">
+                              {procedure.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Regras de Repasse Financeiro */}
                 {isHealthProfessional(formData.role) && (
                   <div className="md:col-span-2 space-y-4">
