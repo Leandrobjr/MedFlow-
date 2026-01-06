@@ -45,12 +45,18 @@ export default function DashboardPage() {
   const handleStartAppointment = async (appointmentId: string) => {
     setUpdatingStatus(appointmentId);
     try {
+      // 1. Atualizar status para in_progress
       await appointmentService.updateStatus(appointmentId, 'in_progress');
+      
+      // 2. Buscar appointment para obter patientId
+      const appointment = await appointmentService.getById(appointmentId);
+      
+      // 3. Redirecionar para PEP com patientId e appointmentId
+      router.push(`/dashboard/pep?patientId=${appointment.patientId}&appointmentId=${appointmentId}`);
+      
       toast.success('Atendimento iniciado!');
-      fetchAppointments();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao iniciar atendimento');
-    } finally {
       setUpdatingStatus(null);
     }
   };
@@ -75,10 +81,10 @@ export default function DashboardPage() {
   const getStatusBadge = (status: string) => {
     const statusLower = status.toLowerCase();
     const statusMap: Record<string, { label: string; bg: string; text: string }> = {
-      scheduled: { label: 'Agendado', bg: 'bg-blue-50', text: 'text-blue-700' },
-      confirmed: { label: 'Confirmado', bg: 'bg-green-50', text: 'text-green-700' },
-      in_progress: { label: 'Em Atendimento', bg: 'bg-yellow-50', text: 'text-yellow-700' },
-      completed: { label: 'Concluído', bg: 'bg-gray-50', text: 'text-gray-700' },
+      scheduled: { label: 'AGENDADO', bg: 'bg-blue-50', text: 'text-blue-700' },
+      confirmed: { label: 'AGUARDANDO', bg: 'bg-green-50', text: 'text-green-700' },
+      in_progress: { label: 'EM ATENDIMENTO', bg: 'bg-yellow-50', text: 'text-yellow-700' },
+      completed: { label: 'FINALIZADO', bg: 'bg-gray-50', text: 'text-gray-700' },
       cancelled: { label: 'Cancelado', bg: 'bg-red-50', text: 'text-red-700' },
       canceled: { label: 'Cancelado', bg: 'bg-red-50', text: 'text-red-700' },
     };
@@ -140,105 +146,93 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Próximas Consultas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-bold text-gray-900 flex items-center">
-              <Clock className="h-5 w-5 mr-2 text-blue-600" />
-              Próximas Consultas
-            </h3>
-            <button 
-              onClick={() => router.push('/dashboard/agenda')}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              Ver todas
-            </button>
-          </div>
-          <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
-            {loading ? (
-              <div className="p-8 text-center">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto" />
-                <p className="text-sm text-gray-500 mt-2">Carregando consultas...</p>
-              </div>
-            ) : appointments.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 italic">
-                Nenhuma consulta agendada para hoje.
-              </div>
-            ) : (
-              appointments.map((appointment) => {
-                const startTime = parseISO(appointment.startTime);
-                const statusLower = appointment.status.toLowerCase();
-                const canStart = statusLower === 'confirmed';
-                const canCancel = statusLower !== 'completed' && statusLower !== 'cancelled' && statusLower !== 'canceled';
+      {/* Próximas Consultas - Estendido até o final */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-900 flex items-center">
+            <Clock className="h-5 w-5 mr-2 text-blue-600" />
+            Próximas Consultas
+          </h3>
+          <button 
+            onClick={() => router.push('/dashboard/agenda')}
+            className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
+            Ver todas
+          </button>
+        </div>
+        <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+          {loading ? (
+            <div className="p-8 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto" />
+              <p className="text-sm text-gray-500 mt-2">Carregando consultas...</p>
+            </div>
+          ) : appointments.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 italic">
+              Nenhuma consulta agendada para hoje.
+            </div>
+          ) : (
+            appointments.map((appointment) => {
+              const startTime = parseISO(appointment.startTime);
+              const statusLower = appointment.status.toLowerCase();
+              const canStart = statusLower === 'confirmed';
+              const canCancel = statusLower !== 'completed' && statusLower !== 'cancelled' && statusLower !== 'canceled';
 
-                return (
-                  <div key={appointment.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start gap-4">
-                      <div className="text-sm font-bold text-gray-400 min-w-[60px]">
-                        {format(startTime, 'HH:mm')}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">
-                          {appointment.patient?.name || 'Paciente'}
+              return (
+                <div key={appointment.id} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start gap-4">
+                    <div className="text-sm font-bold text-gray-400 min-w-[60px]">
+                      {format(startTime, 'HH:mm')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">
+                        {appointment.patient?.name || 'Paciente'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {getAppointmentType(appointment)}
+                      </p>
+                      {appointment.staff && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {appointment.staff.name}
+                          {appointment.staff.specialty && ` - ${appointment.staff.specialty}`}
                         </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {getAppointmentType(appointment)}
-                        </p>
-                        {appointment.staff && (
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {appointment.staff.name}
-                            {appointment.staff.specialty && ` - ${appointment.staff.specialty}`}
-                          </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {getStatusBadge(appointment.status)}
+                        {canStart && (
+                          <button
+                            onClick={() => handleStartAppointment(appointment.id)}
+                            disabled={updatingStatus === appointment.id}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {updatingStatus === appointment.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                            ) : (
+                              <Play className="h-3 w-3 mr-1.5" />
+                            )}
+                            Iniciar Atendimento
+                          </button>
                         )}
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          {getStatusBadge(appointment.status)}
-                          {canStart && (
-                            <button
-                              onClick={() => handleStartAppointment(appointment.id)}
-                              disabled={updatingStatus === appointment.id}
-                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {updatingStatus === appointment.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                              ) : (
-                                <Play className="h-3 w-3 mr-1" />
-                              )}
-                              Iniciar
-                            </button>
-                          )}
-                          {canCancel && (
-                            <button
-                              onClick={() => handleCancelAppointment(appointment.id)}
-                              disabled={updatingStatus === appointment.id}
-                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {updatingStatus === appointment.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                              ) : (
-                                <X className="h-3 w-3 mr-1" />
-                              )}
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
+                        {canCancel && (
+                          <button
+                            onClick={() => handleCancelAppointment(appointment.id)}
+                            disabled={updatingStatus === appointment.id}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {updatingStatus === appointment.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                            ) : (
+                              <X className="h-3 w-3 mr-1.5" />
+                            )}
+                            Cancelar
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Atividades Recentes */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100">
-            <h3 className="font-bold text-gray-900">Atividades Recentes</h3>
-          </div>
-          <div className="p-6 text-center text-gray-400 italic">
-            Nenhuma atividade registrada hoje.
-          </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

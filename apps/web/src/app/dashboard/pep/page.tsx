@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { patientService, Patient } from '@/services/data-service';
 import { pepService, MedicalRecord } from '@/services/pep-service';
+import { appointmentService } from '@/services/appointment-service';
 import { Search, User, FileText, ChevronRight, History, Plus, Lock, Send, Loader2, ArrowLeft, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
 export default function PEPPage() {
+  const searchParams = useSearchParams();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
@@ -58,6 +61,39 @@ export default function PEPPage() {
   useEffect(() => {
     fetchPatients();
   }, []);
+
+  // Verificar se há patientId ou appointmentId nos query params
+  useEffect(() => {
+    const patientIdParam = searchParams.get('patientId');
+    const appointmentIdParam = searchParams.get('appointmentId');
+
+    if (patientIdParam && patients.length > 0) {
+      const patient = patients.find(p => p.id === patientIdParam);
+      if (patient) {
+        setSelectedPatient(patient);
+        setViewMode('timeline');
+        
+        // Buscar prontuários do paciente
+        fetchRecords(patientIdParam).then(async () => {
+          // Se tiver appointmentId, buscar prontuário específico desse appointment
+          if (appointmentIdParam) {
+            // Buscar novamente para garantir que temos os dados atualizados
+            const allRecords = await pepService.getByPatient(patientIdParam);
+            setRecords(allRecords);
+            
+            const record = allRecords.find(r => r.appointmentId === appointmentIdParam);
+            if (record) {
+              handleOpenRecord(record);
+            } else {
+              // Se não existir prontuário, apenas mostrar mensagem
+              // O profissional pode criar manualmente se necessário
+              toast.info('Prontuário ainda não foi criado. Você pode criar um novo prontuário para este atendimento.');
+            }
+          }
+        });
+      }
+    }
+  }, [searchParams, patients]);
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatient(patient);

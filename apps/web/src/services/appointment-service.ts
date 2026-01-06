@@ -58,6 +58,18 @@ export const appointmentService = {
     };
   },
 
+  getById: async (id: string) => {
+    const response = await api.get<Appointment>(`/appointments/${id}`);
+    const apt = response.data;
+    return {
+      ...apt,
+      doctorId: apt.staffId || apt.doctorId,
+      doctor: apt.staff ? { name: apt.staff.name } : apt.doctor,
+      notes: apt.observations || apt.notes,
+      status: apt.status.toUpperCase() as any,
+    };
+  },
+
   updateStatus: async (id: string, status: string) => {
     const response = await api.patch<Appointment>(`/appointments/${id}/status`, { status });
     const apt = response.data;
