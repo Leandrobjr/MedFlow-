@@ -31,6 +31,19 @@ export class FinanceService {
       },
     });
 
+    // Atualizar status do appointment para "AGUARDANDO" (confirmed) quando pagamento é efetuado
+    if (dto.appointmentId && dto.type === TransactionType.INCOME) {
+      try {
+        await this.prisma.client.appointment.update({
+          where: { id: dto.appointmentId },
+          data: { status: 'confirmed' },
+        });
+      } catch (error) {
+        // Log do erro mas não falha a criação da transação
+        console.error(`Erro ao atualizar status do appointment ${dto.appointmentId}:`, error);
+      }
+    }
+
     // Lógica de Repasse Médico (M1-07)
     // Se for uma entrada de consulta e tiver um médico vinculado
     if (dto.type === TransactionType.INCOME && dto.staffId) {
