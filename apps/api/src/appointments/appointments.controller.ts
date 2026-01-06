@@ -49,7 +49,7 @@ export class AppointmentsController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
+  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
   updateStatus(
     @Req() req: any,
     @Param('id') id: string,
