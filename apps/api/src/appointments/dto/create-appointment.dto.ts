@@ -17,6 +17,10 @@ export class CreateAppointmentDto {
   @IsNotEmpty({ message: 'Horário de término é obrigatório' })
   endTime: string;
 
+  @IsUUID()
+  @IsNotEmpty({ message: 'Procedimento é obrigatório' })
+  procedureId: string;
+
   @IsString()
   @IsOptional()
   type?: string;

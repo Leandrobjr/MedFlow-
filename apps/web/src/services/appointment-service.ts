@@ -4,6 +4,7 @@ export interface Appointment {
   id: string;
   patientId: string;
   staffId: string;
+  procedureId: string;
   doctorId?: string; // Alias para staffId para compatibilidade
   startTime: string;
   endTime: string;
@@ -20,6 +21,11 @@ export interface Appointment {
     id: string;
     name: string;
     specialty?: string;
+  };
+  procedure?: {
+    id: string;
+    name: string;
+    grossAmount: number;
   };
   doctor?: {
     name: string;
@@ -42,6 +48,7 @@ export const appointmentService = {
   create: async (data: {
     patientId: string;
     staffId: string;
+    procedureId: string;
     startTime: string;
     endTime: string;
     observations?: string;

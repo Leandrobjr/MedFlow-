@@ -48,6 +48,11 @@ export class StaffController {
   remove(@Req() req: any, @Param('id') id: string) {
     return this.staffService.remove(req.tenantId, id);
   }
+
+  @Get(':id/procedures')
+  getProcedures(@Req() req: any, @Param('id') id: string) {
+    return this.staffService.getProcedures(req.tenantId, id);
+  }
 }
 
 

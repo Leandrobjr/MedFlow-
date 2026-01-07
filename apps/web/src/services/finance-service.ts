@@ -33,13 +33,35 @@ export interface MedicalFee {
 export const financeService = {
   getTransactions: async (date?: string) => {
     const response = await api.get<Transaction[]>('/finance/transactions', { params: { date } });
+    console.log('Resposta do backend:', response.data?.length || 0, 'transações para data:', date);
     // Mapear dados do backend para formato esperado pelo frontend
-    return response.data.map(t => ({
-      ...t,
-      type: (t.type === 'income' ? 'INCOME' : t.type === 'expense' ? 'EXPENSE' : t.type) as 'INCOME' | 'EXPENSE',
-      paymentMethod: t.paymentMethod || t.method || 'N/A',
-      date: t.date || t.createdAt || new Date().toISOString(),
-    }));
+    return (response.data || []).map(t => {
+      // Debug: verificar o que está vindo
+      console.log('Transação recebida:', {
+        id: t.id,
+        description: t.description,
+        appointment: t.appointment,
+        patient: t.patient,
+      });
+
+      // Criar descrição com fallback
+      let description = t.description;
+      if (!description && t.appointment?.patient?.name) {
+        const procedureName = t.appointment.type || t.category || 'Consulta';
+        description = `${procedureName} - ${t.appointment.patient.name}`;
+      } else if (!description && t.patient?.name) {
+        description = `${t.category || 'Consulta'} - ${t.patient.name}`;
+      }
+
+      return {
+        ...t,
+        type: (t.type === 'income' ? 'INCOME' : t.type === 'expense' ? 'EXPENSE' : t.type) as 'INCOME' | 'EXPENSE',
+        paymentMethod: t.paymentMethod || t.method || 'N/A',
+        date: t.date || t.createdAt || new Date().toISOString(),
+        amount: Number(t.amount || 0), // Garantir que amount seja número
+        description: description || undefined,
+      };
+    });
   },
 
   createTransaction: async (data: {
@@ -57,14 +79,18 @@ export const financeService = {
       ...data,
       type: data.type.toLowerCase() as 'income' | 'expense',
       method: data.method,
+      description: data.description, // Garantir que description seja enviada
     };
+    console.log('Payload enviado para backend:', payload);
     const response = await api.post<Transaction>('/finance/transactions', payload);
     const t = response.data;
+    console.log('Resposta do backend:', t);
     return {
       ...t,
       type: (t.type === 'income' ? 'INCOME' : 'EXPENSE') as 'INCOME' | 'EXPENSE',
       paymentMethod: t.paymentMethod || t.method || 'N/A',
       date: t.date || t.createdAt || new Date().toISOString(),
+      description: t.description, // Preservar description
     };
   },
 
@@ -87,6 +113,11 @@ export const financeService = {
 
   closeDailyBox: async (data: { date: string; closedById: string; observations?: string }) => {
     const response = await api.post('/finance/closures', data);
+    return response.data;
+  },
+
+  checkAppointmentBilling: async (appointmentId: string) => {
+    const response = await api.get(`/finance/transactions/check-appointment/${appointmentId}`);
     return response.data;
   }
 };

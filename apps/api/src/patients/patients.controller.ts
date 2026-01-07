@@ -34,7 +34,7 @@ export class PatientsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
+  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
   update(
     @Req() req: any,
     @Param('id') id: string,

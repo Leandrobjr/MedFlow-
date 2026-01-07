@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 
@@ -7,7 +7,7 @@ export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, createAppointmentDto: CreateAppointmentDto) {
-    const { patientId, staffId, startTime, endTime } = createAppointmentDto;
+    const { patientId, staffId, startTime, endTime, procedureId } = createAppointmentDto;
     const start = new Date(startTime);
     const end = new Date(endTime);
 
@@ -16,7 +16,33 @@ export class AppointmentsService {
       throw new BadRequestException('O horário de término deve ser após o início.');
     }
 
-    // 2. Verificar conflitos de agenda para o mesmo médico
+    // 2. Validar procedureId
+    const procedure = await this.prisma.client.procedure.findUnique({
+      where: { id: procedureId },
+    });
+
+    if (!procedure || procedure.tenantId !== tenantId) {
+      throw new BadRequestException('Procedimento não encontrado ou não pertence a este tenant.');
+    }
+
+    // 3. Validar se procedimento está vinculado ao profissional
+    const staffProcedure = await this.prisma.client.staffProcedure.findUnique({
+      where: {
+        staffId_procedureId: {
+          staffId,
+          procedureId,
+        },
+      },
+    });
+
+    if (!staffProcedure) {
+      throw new BadRequestException('Este procedimento não está vinculado ao profissional selecionado.');
+    }
+
+    // 4. Usar nome do procedimento como type
+    createAppointmentDto.type = procedure.name;
+
+    // 5. Verificar conflitos de agenda para o mesmo médico
     const conflict = await this.prisma.client.appointment.findFirst({
       where: {
         tenantId,
@@ -35,7 +61,7 @@ export class AppointmentsService {
       throw new BadRequestException('O médico já possui um agendamento neste horário.');
     }
 
-    // 3. Criar agendamento
+    // 6. Criar agendamento
     return this.prisma.client.appointment.create({
       data: {
         ...createAppointmentDto,
@@ -46,6 +72,7 @@ export class AppointmentsService {
       include: {
         patient: { select: { name: true } },
         staff: { select: { name: true, specialty: true } },
+        procedure: { select: { id: true, name: true, grossAmount: true } },
       },
     });
   }
@@ -90,12 +117,10 @@ export class AppointmentsService {
       include: {
         patient: { select: { id: true, name: true, phone: true } },
         staff: { select: { id: true, name: true, specialty: true } },
+        procedure: { select: { id: true, name: true, grossAmount: true } },
       },
       orderBy: { startTime: 'asc' },
-    }).then(appointments => appointments.map(apt => ({
-      ...apt,
-      type: apt.type || 'consultation', // Garantir que type sempre existe
-    })));
+    });
   }
 
   async findOne(tenantId: string, id: string) {
@@ -104,11 +129,18 @@ export class AppointmentsService {
       include: {
         patient: true,
         staff: true,
+        procedure: { select: { id: true, name: true, grossAmount: true } },
       },
     });
   }
 
-  async updateStatus(tenantId: string, id: string, status: string) {
+  async updateStatus(
+    tenantId: string, 
+    id: string, 
+    status: string,
+    userRole?: string,
+    userStaffId?: string,
+  ) {
     // Validar status permitidos
     const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'canceled'];
     const normalizedStatus = status.toLowerCase();
@@ -117,9 +149,54 @@ export class AppointmentsService {
       throw new BadRequestException(`Status inválido. Valores permitidos: ${allowedStatuses.join(', ')}`);
     }
 
+    // Buscar agendamento para validações
+    const appointment = await this.prisma.client.appointment.findFirst({
+      where: { id, tenantId },
+      select: { staffId: true, status: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Agendamento não encontrado.');
+    }
+
+    // Validações específicas para RECEPTIONIST
+    if (userRole === 'receptionist' || userRole === 'RECEPTIONIST') {
+      // RECEPTIONIST NÃO pode iniciar atendimento (in_progress)
+      if (normalizedStatus === 'in_progress') {
+        throw new ForbiddenException('Apenas médicos podem iniciar atendimentos.');
+      }
+      // RECEPTIONIST também não pode finalizar (completed)
+      if (normalizedStatus === 'completed') {
+        throw new ForbiddenException('Apenas médicos podem finalizar atendimentos.');
+      }
+    }
+
+    // Validações específicas para DOCTOR
+    if (userRole === 'doctor' || userRole === 'DOCTOR') {
+      // DOCTOR precisa ter staffId vinculado
+      if (!userStaffId) {
+        throw new ForbiddenException('Usuário médico não possui vínculo com profissional. Entre em contato com o administrador.');
+      }
+
+      // DOCTOR só pode atualizar seus próprios agendamentos
+      if (appointment.staffId !== userStaffId) {
+        throw new ForbiddenException('Você só pode atualizar status dos seus próprios agendamentos.');
+      }
+
+      // DOCTOR só pode atualizar para in_progress ou completed
+      if (normalizedStatus !== 'in_progress' && normalizedStatus !== 'completed') {
+        throw new ForbiddenException('Médicos só podem iniciar (in_progress) ou finalizar (completed) atendimentos.');
+      }
+    }
+
     return this.prisma.client.appointment.update({
       where: { id, tenantId },
       data: { status: normalizedStatus },
+      include: {
+        patient: { select: { id: true, name: true } },
+        staff: { select: { id: true, name: true } },
+        procedure: { select: { id: true, name: true, grossAmount: true } },
+      },
     });
   }
 

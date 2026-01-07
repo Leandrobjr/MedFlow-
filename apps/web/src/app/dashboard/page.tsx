@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/use-auth';
 import { appointmentService, Appointment } from '@/services/appointment-service';
 import { patientService } from '@/services/data-service';
-import { Calendar, Clock, MessageSquare, Play, X, Loader2 } from 'lucide-react';
+import { Calendar, Clock, MessageSquare, Play, X, Loader2, FileText } from 'lucide-react';
 import { format, formatDistanceToNow, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useState, useEffect } from 'react';
@@ -58,6 +58,20 @@ export default function DashboardPage() {
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao iniciar atendimento');
       setUpdatingStatus(null);
+    }
+  };
+
+  const handleContinueAppointment = async (appointmentId: string) => {
+    try {
+      // Buscar appointment para obter patientId
+      const appointment = await appointmentService.getById(appointmentId);
+      
+      // Redirecionar para PEP com patientId e appointmentId
+      router.push(`/dashboard/pep?patientId=${appointment.patientId}&appointmentId=${appointmentId}`);
+      
+      toast.success('Retornando ao atendimento...');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao acessar atendimento');
     }
   };
 
@@ -174,7 +188,10 @@ export default function DashboardPage() {
             appointments.map((appointment) => {
               const startTime = parseISO(appointment.startTime);
               const statusLower = appointment.status.toLowerCase();
-              const canStart = statusLower === 'confirmed';
+              // Apenas DOCTOR pode iniciar atendimento
+              const isDoctor = user?.role === 'doctor' || user?.role === 'DOCTOR';
+              const canStart = isDoctor && statusLower === 'confirmed';
+              const canContinue = isDoctor && statusLower === 'in_progress';
               const canCancel = statusLower !== 'completed' && statusLower !== 'cancelled' && statusLower !== 'canceled';
 
               return (
@@ -210,6 +227,15 @@ export default function DashboardPage() {
                               <Play className="h-3 w-3 mr-1.5" />
                             )}
                             Iniciar Atendimento
+                          </button>
+                        )}
+                        {canContinue && (
+                          <button
+                            onClick={() => handleContinueAppointment(appointment.id)}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 transition-colors"
+                          >
+                            <FileText className="h-3 w-3 mr-1.5" />
+                            Continuar Atendimento
                           </button>
                         )}
                         {canCancel && (

@@ -49,13 +49,19 @@ export class AppointmentsController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
+  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
   updateStatus(
     @Req() req: any,
     @Param('id') id: string,
     @Body('status') status: string,
   ) {
-    return this.appointmentsService.updateStatus(req.tenantId, id, status);
+    return this.appointmentsService.updateStatus(
+      req.tenantId, 
+      id, 
+      status,
+      req.user?.role,
+      req.user?.staffId,
+    );
   }
 
   @Delete(':id')

@@ -18,6 +18,7 @@ export interface JwtPayload {
   name: string;
   role: UserRole;
   tenantId: string;
+  staffId?: string;
 }
 
 export const API_VERSION = 'v1';

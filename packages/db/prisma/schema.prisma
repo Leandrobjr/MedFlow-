@@ -47,6 +47,7 @@ model User {
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   staffProfile Staff?
+  createdTransactions Transaction[] @relation("TransactionCreatedBy")
 
   @@map("users")
 }
@@ -63,6 +64,8 @@ model Patient {
   city        String?
   state       String?
   zipCode     String?  @map("zip_code")
+  allergies   String?  @db.Text
+  medications String?  @db.Text
   tenantId    String   @map("tenant_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -116,6 +119,7 @@ model Appointment {
   patientId   String   @map("patient_id") @db.Uuid
   staffId     String   @map("staff_id") @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
+  procedureId String   @map("procedure_id") @db.Uuid
   startTime   DateTime @map("start_time")
   endTime     DateTime @map("end_time")
   status      String   @default("scheduled")
@@ -130,6 +134,7 @@ model Appointment {
   patient     Patient  @relation(fields: [patientId], references: [id])
   staff       Staff    @relation(fields: [staffId], references: [id])
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  procedure   Procedure @relation(fields: [procedureId], references: [id])
   medicalRecord MedicalRecord?
   transaction   Transaction?
 
@@ -183,6 +188,7 @@ model Transaction {
   patientId     String?  @map("patient_id") @db.Uuid
   staffId       String?  @map("staff_id") @db.Uuid
   appointmentId String?  @unique @map("appointment_id") @db.Uuid
+  createdById   String?  @map("created_by_id") @db.Uuid
   
   type          String   
   category      String   
@@ -198,6 +204,7 @@ model Transaction {
   patient       Patient?    @relation(fields: [patientId], references: [id])
   staff         Staff?      @relation(fields: [staffId], references: [id])
   appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  createdBy     User?       @relation("TransactionCreatedBy", fields: [createdById], references: [id])
   medicalFee    MedicalFee?
 
   @@map("transactions")
@@ -317,6 +324,7 @@ model Procedure {
 
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   staffProcedures StaffProcedure[]
+  appointments Appointment[]
 
   @@map("procedures")
 }

@@ -12,6 +12,8 @@ export interface Patient {
   city?: string;
   state?: string;
   zipCode?: string;
+  allergies?: string;
+  medications?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -53,6 +55,8 @@ export const patientService = {
     city?: string;
     state?: string;
     zipCode?: string;
+    allergies?: string;
+    medications?: string;
   }>) => {
     const response = await api.patch<Patient>(`/patients/${id}`, data);
     return response.data;
@@ -97,6 +101,11 @@ export const staffService = {
   
   getById: async (id: string) => {
     const response = await api.get<Staff>(`/staff/${id}`);
+    return response.data;
+  },
+  
+  getProcedures: async (id: string) => {
+    const response = await api.get<Procedure[]>(`/staff/${id}/procedures`);
     return response.data;
   },
   

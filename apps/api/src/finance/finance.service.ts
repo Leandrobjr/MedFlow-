@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto, CreateClosureDto, TransactionType } from './dto/finance.dto';
 
@@ -6,7 +6,7 @@ import { CreateTransactionDto, CreateClosureDto, TransactionType } from './dto/f
 export class FinanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createTransaction(tenantId: string, dto: CreateTransactionDto) {
+  async createTransaction(tenantId: string, dto: CreateTransactionDto, userId?: string) {
     // 1. Verificar se o caixa do dia já foi fechado
     const today = new Date();
     const closure = await this.prisma.client.dailyClosure.findFirst({
@@ -20,15 +20,68 @@ export class FinanceService {
       throw new BadRequestException('O caixa deste dia já foi fechado. Não é possível realizar novas transações.');
     }
 
+    // 2. Validações se tiver appointmentId
+    if (dto.appointmentId) {
+      // Verificar se já existe transação para este appointment
+      const existing = await this.prisma.client.transaction.findUnique({
+        where: { appointmentId: dto.appointmentId },
+      });
+
+      if (existing) {
+        throw new BadRequestException('Este agendamento já foi faturado.');
+      }
+
+      // Verificar se o appointment existe e pertence ao tenant
+      const appointment = await this.prisma.client.appointment.findUnique({
+        where: { id: dto.appointmentId },
+      });
+
+      if (!appointment || appointment.tenantId !== tenantId) {
+        throw new NotFoundException('Agendamento não encontrado ou não pertence a este tenant.');
+      }
+
+      // Se não foi passado staffId, usar o do appointment
+      if (!dto.staffId && appointment.staffId) {
+        dto.staffId = appointment.staffId;
+      }
+
+      // Se não foi passado patientId, usar o do appointment
+      if (!dto.patientId && appointment.patientId) {
+        dto.patientId = appointment.patientId;
+      }
+    }
+
+    console.log(`[FinanceService] Criando transação:`, {
+      type: dto.type,
+      amount: dto.amount,
+      description: dto.description,
+      appointmentId: dto.appointmentId,
+    });
+
     const transaction = await this.prisma.client.transaction.create({
       data: {
         ...dto,
         tenantId,
+        createdById: userId || null,
       },
       include: {
         patient: { select: { name: true } },
-        appointment: true,
+        appointment: {
+          include: {
+            patient: { select: { name: true } },
+          },
+        },
+        createdBy: { select: { id: true, name: true, email: true } },
       },
+    });
+
+    console.log(`[FinanceService] Transação criada:`, {
+      id: transaction.id,
+      description: transaction.description,
+      appointment: transaction.appointment ? {
+        id: transaction.appointment.id,
+        patient: transaction.appointment.patient?.name,
+      } : null,
     });
 
     // Atualizar status do appointment para "AGUARDANDO" (confirmed) quando pagamento é efetuado
@@ -114,27 +167,66 @@ export class FinanceService {
     };
   }
 
-  async getDailyTransactions(tenantId: string, date?: string) {
-    const targetDate = date ? new Date(date) : new Date();
+  async getDailyTransactions(tenantId: string, date?: string, createdById?: string) {
+    // Parse da data considerando timezone local
+    let targetDate: Date;
+    if (date) {
+      // Se a data vem como 'yyyy-MM-dd', criar Date no timezone local
+      const [year, month, day] = date.split('-').map(Number);
+      targetDate = new Date(year, month - 1, day);
+    } else {
+      targetDate = new Date();
+    }
+    
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    return this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+    console.log(`[FinanceService] Buscando transações para tenant ${tenantId}, data: ${date || 'hoje'}`);
+    console.log(`[FinanceService] Range: ${startOfDay.toISOString()} até ${endOfDay.toISOString()}`);
+
+    const where: any = {
+      tenantId,
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay,
       },
+    };
+
+    // Filtrar por recepcionista se fornecido
+    if (createdById) {
+      where.createdById = createdById;
+      console.log(`[FinanceService] Filtrando por recepcionista: ${createdById}`);
+    }
+
+    const transactions = await this.prisma.client.transaction.findMany({
+      where,
       include: {
         patient: { select: { name: true } },
-        appointment: true,
+        appointment: {
+          include: {
+            patient: { select: { name: true } },
+          },
+        },
+        createdBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    console.log(`[FinanceService] Encontradas ${transactions.length} transações`);
+    // Log para debug: verificar se description está vindo
+    if (transactions.length > 0) {
+      console.log(`[FinanceService] Primeira transação:`, {
+        id: transactions[0].id,
+        description: transactions[0].description,
+        appointment: transactions[0].appointment ? {
+          id: transactions[0].appointment.id,
+          patient: transactions[0].appointment.patient?.name,
+        } : null,
+      });
+    }
+    return transactions;
   }
 
   async closeDailyBox(tenantId: string, dto: CreateClosureDto) {
@@ -207,6 +299,58 @@ export class FinanceService {
         },
       },
     });
+  }
+
+  async checkAppointmentBilling(tenantId: string, appointmentId: string) {
+    // Verificar se já existe transação para este appointment
+    const existingTransaction = await this.prisma.client.transaction.findUnique({
+      where: { appointmentId },
+      select: { id: true, amount: true, createdAt: true, method: true },
+    });
+
+    // Buscar dados do appointment com procedure
+    const appointment = await this.prisma.client.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        patient: { select: { id: true, name: true } },
+        staff: { select: { id: true, name: true } },
+        procedure: { select: { id: true, name: true, grossAmount: true } },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Agendamento não encontrado.');
+    }
+
+    if (appointment.tenantId !== tenantId) {
+      throw new NotFoundException('Agendamento não pertence a este tenant.');
+    }
+
+    if (!appointment.procedure) {
+      throw new BadRequestException('Agendamento não possui procedimento vinculado.');
+    }
+
+    const procedure = appointment.procedure;
+
+    return {
+      appointment: {
+        id: appointment.id,
+        patient: appointment.patient,
+        staff: appointment.staff,
+        type: appointment.type,
+        procedureName: procedure.name,
+        startTime: appointment.startTime,
+        status: appointment.status,
+      },
+      alreadyBilled: !!existingTransaction,
+      existingTransaction: existingTransaction || null,
+      suggestedAmount: Number(procedure.grossAmount),
+      procedure: {
+        id: procedure.id,
+        name: procedure.name,
+        grossAmount: Number(procedure.grossAmount),
+      },
+    };
   }
 }
 

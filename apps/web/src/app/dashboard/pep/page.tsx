@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import { patientService, Patient } from '@/services/data-service';
 import { pepService, MedicalRecord } from '@/services/pep-service';
 import { appointmentService } from '@/services/appointment-service';
@@ -11,6 +12,7 @@ import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 
 export default function PEPPage() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -87,7 +89,9 @@ export default function PEPPage() {
             } else {
               // Se não existir prontuário, apenas mostrar mensagem
               // O profissional pode criar manualmente se necessário
-              toast.info('Prontuário ainda não foi criado. Você pode criar um novo prontuário para este atendimento.');
+              toast('Prontuário ainda não foi criado. Você pode criar um novo prontuário para este atendimento.', {
+                icon: 'ℹ️',
+              });
             }
           }
         });
@@ -122,10 +126,25 @@ export default function PEPPage() {
     }
     
     try {
-      await pepService.update(selectedRecord.id, formData);
+      // Atualizar e obter o registro atualizado
+      const updatedRecord = await pepService.update(selectedRecord.id, formData);
+      
+      // Atualizar selectedRecord com os dados retornados
+      setSelectedRecord(updatedRecord);
+      
+      // Atualizar formData com os dados salvos
+      setFormData({
+        anamnesis: updatedRecord.anamnesis || '',
+        physicalExam: updatedRecord.physicalExam || '',
+        diagnosis: updatedRecord.diagnosis || '',
+        prescription: updatedRecord.prescription || '',
+        conduct: updatedRecord.conduct || '',
+      });
+      
+      // Atualizar lista de registros
+      await fetchRecords(selectedPatient!.id);
+      
       toast.success('Prontuário salvo com sucesso!');
-      fetchRecords(selectedPatient!.id);
-      setViewMode('timeline');
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error || 'Erro ao salvar prontuário';
       toast.error(message);
@@ -158,6 +177,65 @@ export default function PEPPage() {
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error || 'Erro ao finalizar prontuário';
       toast.error(message);
+    }
+  };
+
+  const handleNewAppointment = async () => {
+    if (!selectedPatient) {
+      toast.error('Selecione um paciente primeiro');
+      return;
+    }
+
+    const appointmentIdParam = searchParams.get('appointmentId');
+    
+    if (!appointmentIdParam) {
+      toast.error('Não foi possível identificar o agendamento. Por favor, inicie o atendimento novamente pela página inicial.');
+      return;
+    }
+
+    if (!user?.staffId) {
+      toast.error('Usuário não possui vínculo com profissional. Entre em contato com o administrador.');
+      return;
+    }
+
+    try {
+      // Verificar se já existe prontuário para este appointment
+      const existingRecords = await pepService.getByPatient(selectedPatient.id);
+      const existingRecord = existingRecords.find(r => r.appointmentId === appointmentIdParam);
+      
+      if (existingRecord) {
+        // Se já existe, apenas abrir
+        handleOpenRecord(existingRecord);
+        toast.success('Prontuário encontrado!');
+        return;
+      }
+
+      // Buscar dados do appointment para garantir que temos todas as informações
+      const appointment = await appointmentService.getById(appointmentIdParam);
+      
+      if (!appointment) {
+        toast.error('Agendamento não encontrado.');
+        return;
+      }
+
+      // Criar novo prontuário
+      const newRecord = await pepService.create({
+        appointmentId: appointmentIdParam,
+        patientId: selectedPatient.id,
+        staffId: user.staffId,
+      });
+
+      toast.success('Novo prontuário criado!');
+      
+      // Atualizar lista de prontuários
+      await fetchRecords(selectedPatient.id);
+      
+      // Abrir o prontuário no editor
+      handleOpenRecord(newRecord);
+    } catch (error: any) {
+      const message = error.response?.data?.message || error.response?.data?.error || 'Erro ao criar prontuário';
+      toast.error(message);
+      console.error('Erro ao criar prontuário:', error);
     }
   };
 
@@ -245,7 +323,11 @@ export default function PEPPage() {
               <p className="text-sm text-gray-500">CPF: {selectedPatient?.cpf} • {selectedPatient?.phone}</p>
             </div>
           </div>
-          <button className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100">
+          <button 
+            onClick={handleNewAppointment}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!selectedPatient}
+          >
             <Plus className="h-5 w-5 mr-2" /> Novo Atendimento
           </button>
         </div>
@@ -296,11 +378,15 @@ export default function PEPPage() {
             <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 space-y-4">
               <div>
                 <p className="text-xs font-bold text-blue-600 uppercase">Alergias</p>
-                <p className="text-sm text-gray-700">Nenhuma registrada</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {selectedPatient?.allergies?.trim() || 'Nenhuma registrada'}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-bold text-blue-600 uppercase">Medicamentos Contínuos</p>
-                <p className="text-sm text-gray-700">Nenhum registrado</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {selectedPatient?.medications?.trim() || 'Nenhum registrado'}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-bold text-blue-600 uppercase">Última Consulta</p>
@@ -393,6 +479,73 @@ export default function PEPPage() {
                 placeholder="Encaminhamentos, exames solicitados, retorno..."
                 className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
               />
+            </section>
+
+            {/* Seção de Informações do Paciente */}
+            <section className="space-y-4 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Informações do Paciente</h3>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Alergias
+                </label>
+                <textarea
+                  value={selectedPatient?.allergies || ''}
+                  onChange={(e) => {
+                    if (!selectedPatient) return;
+                    // Atualizar apenas o estado local para permitir digitação fluida
+                    setSelectedPatient({ ...selectedPatient, allergies: e.target.value });
+                  }}
+                  onBlur={async (e) => {
+                    if (!selectedPatient) return;
+                    const newValue = e.target.value;
+                    // Só salvar se o valor mudou
+                    if (newValue !== (selectedPatient.allergies || '')) {
+                      try {
+                        await patientService.update(selectedPatient.id, { allergies: newValue });
+                        toast.success('Alergias atualizadas!');
+                      } catch (error: any) {
+                        toast.error('Erro ao atualizar alergias');
+                        // Reverter para o valor anterior em caso de erro
+                        setSelectedPatient({ ...selectedPatient, allergies: selectedPatient.allergies || '' });
+                      }
+                    }
+                  }}
+                  placeholder="Informe as alergias do paciente..."
+                  className="w-full h-20 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Medicamentos Contínuos
+                </label>
+                <textarea
+                  value={selectedPatient?.medications || ''}
+                  onChange={(e) => {
+                    if (!selectedPatient) return;
+                    // Atualizar apenas o estado local para permitir digitação fluida
+                    setSelectedPatient({ ...selectedPatient, medications: e.target.value });
+                  }}
+                  onBlur={async (e) => {
+                    if (!selectedPatient) return;
+                    const newValue = e.target.value;
+                    // Só salvar se o valor mudou
+                    if (newValue !== (selectedPatient.medications || '')) {
+                      try {
+                        await patientService.update(selectedPatient.id, { medications: newValue });
+                        toast.success('Medicamentos atualizados!');
+                      } catch (error: any) {
+                        toast.error('Erro ao atualizar medicamentos');
+                        // Reverter para o valor anterior em caso de erro
+                        setSelectedPatient({ ...selectedPatient, medications: selectedPatient.medications || '' });
+                      }
+                    }
+                  }}
+                  placeholder="Informe os medicamentos contínuos do paciente..."
+                  className="w-full h-20 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                />
+              </div>
             </section>
 
             {!isLocked && (

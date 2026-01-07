@@ -237,6 +237,47 @@ export class StaffService {
       where: { id, tenantId },
     });
   }
+
+  async getProcedures(tenantId: string, staffId: string) {
+    // Verificar se o staff pertence ao tenant
+    const staff = await this.prisma.client.staff.findFirst({
+      where: { id: staffId, tenantId },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('Profissional não encontrado ou não pertence a este tenant.');
+    }
+
+    // Buscar procedimentos vinculados ao profissional
+    const staffProcedures = await this.prisma.client.staffProcedure.findMany({
+      where: { 
+        staffId,
+        procedure: {
+          tenantId,
+        },
+      },
+      include: {
+        procedure: {
+          select: {
+            id: true,
+            name: true,
+            grossAmount: true,
+            observations: true,
+          },
+        },
+      },
+    });
+
+    // Filtrar e mapear apenas procedimentos válidos
+    return staffProcedures
+      .filter(sp => sp.procedure !== null)
+      .map(sp => ({
+        id: sp.procedure!.id,
+        name: sp.procedure!.name,
+        grossAmount: Number(sp.procedure!.grossAmount),
+        observations: sp.procedure!.observations || undefined,
+      }));
+  }
 }
 
 

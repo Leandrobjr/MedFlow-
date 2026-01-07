@@ -19,13 +19,17 @@ export class FinanceController {
   @Post('transactions')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
   createTransaction(@Req() req: any, @Body() dto: CreateTransactionDto) {
-    return this.financeService.createTransaction(req.tenantId, dto);
+    return this.financeService.createTransaction(req.tenantId, dto, req.user?.id);
   }
 
   @Get('transactions')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
-  getDailyTransactions(@Req() req: any, @Query('date') date?: string) {
-    return this.financeService.getDailyTransactions(req.tenantId, date);
+  getDailyTransactions(
+    @Req() req: any,
+    @Query('date') date?: string,
+    @Query('createdById') createdById?: string,
+  ) {
+    return this.financeService.getDailyTransactions(req.tenantId, date, createdById);
   }
 
   @Post('closures')
@@ -61,6 +65,12 @@ export class FinanceController {
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.DOCTOR)
   getMedicalFeeSummary(@Req() req: any, @Param('doctorId') doctorId: string) {
     return this.financeService.getMedicalFeeSummary(req.tenantId, doctorId);
+  }
+
+  @Get('transactions/check-appointment/:appointmentId')
+  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
+  checkAppointmentBilling(@Req() req: any, @Param('appointmentId') appointmentId: string) {
+    return this.financeService.checkAppointmentBilling(req.tenantId, appointmentId);
   }
 }
 

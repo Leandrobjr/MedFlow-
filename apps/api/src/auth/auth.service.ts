@@ -21,12 +21,19 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha incorretos');
     }
 
+    // Buscar staffId se o usuário tiver um Staff vinculado
+    const staff = await this.prisma.client.staff.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
     const payload = {
       sub: user.id,
       email: user.email,
       name: user.name,
       role: user.role as UserRole,
       tenantId: user.tenantId,
+      staffId: staff?.id || undefined,
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
@@ -61,8 +68,10 @@ export class AuthService {
         {
           sub: payload.sub,
           email: payload.email,
+          name: payload.name,
           role: payload.role,
           tenantId: payload.tenantId,
+          staffId: payload.staffId,
         },
         {
           secret: process.env.JWT_SECRET || 'super-secret-key-change-me',

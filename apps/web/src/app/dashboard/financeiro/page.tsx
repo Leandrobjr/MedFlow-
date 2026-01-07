@@ -51,14 +51,16 @@ export default function FinanceiroPage() {
           financeService.getTransactions(selectedDate),
           financeService.getClosureStatus(selectedDate),
         ]);
-        setTransactions(data);
+        console.log('Transações carregadas:', data.length, 'para data:', selectedDate);
+        setTransactions(data || []);
         setClosureStatus(status);
       } else {
         const data = await financeService.getMedicalFees();
         setMedicalFees(data);
       }
-    } catch (error) {
-      toast.error('Erro ao carregar dados financeiros');
+    } catch (error: any) {
+      console.error('Erro ao carregar dados financeiros:', error);
+      toast.error(error.response?.data?.message || 'Erro ao carregar dados financeiros');
     } finally {
       setLoading(false);
     }
@@ -87,11 +89,11 @@ export default function FinanceiroPage() {
 
   const totalIncome = transactions
     .filter(t => t.type === 'INCOME' || t.type === 'income')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
   const totalExpense = transactions
     .filter(t => t.type === 'EXPENSE' || t.type === 'expense')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -324,15 +326,20 @@ export default function FinanceiroPage() {
                               {t.type === 'INCOME' ? <ArrowUpCircle className="h-4 w-4" /> : <ArrowDownCircle className="h-4 w-4" />}
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900">{t.description || 'Sem descrição'}</div>
-                              <div className="text-xs text-gray-500">{format(new Date(t.date), 'HH:mm')}</div>
+                              <div className="font-semibold text-gray-900">
+                                {t.description || 
+                                 (t.appointment?.patient?.name ? `${t.category || 'Consulta'} - ${t.appointment.patient.name}` : null) ||
+                                 (t.patient?.name ? `${t.category || 'Consulta'} - ${t.patient.name}` : null) ||
+                                 'Sem descrição'}
+                              </div>
+                              <div className="text-xs text-gray-500">{format(new Date(t.date || t.createdAt || new Date()), 'HH:mm')}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">{t.category}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{t.paymentMethod}</td>
                         <td className={`px-6 py-4 text-sm font-bold text-right ${(t.type === 'INCOME' || t.type === 'income') ? 'text-green-600' : 'text-red-600'}`}>
-                          {(t.type === 'INCOME' || t.type === 'income') ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                          {(t.type === 'INCOME' || t.type === 'income') ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(t.amount || 0))}
                         </td>
                       </tr>
                     ))}

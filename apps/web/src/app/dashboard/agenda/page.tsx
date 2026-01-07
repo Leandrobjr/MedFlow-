@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { appointmentService, Appointment } from '@/services/appointment-service';
-import { patientService, staffService, Patient, Staff } from '@/services/data-service';
+import { patientService, staffService, Patient, Staff, Procedure } from '@/services/data-service';
 import { scheduleService, ScheduleConfig, ScheduleBlock } from '@/services/schedule-service';
+import { financeService } from '@/services/finance-service';
 import { calculateDayAvailability, calculatePeriodAvailability, DayAvailability } from '@/lib/availability-utils';
 import { useAuth } from '@/hooks/use-auth';
-import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings, Grid3x3, CalendarDays, List } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Clock, User, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, MoreVertical, Trash2, Edit, Settings, Grid3x3, CalendarDays, List, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays, subDays, startOfDay, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, addWeeks, subWeeks, addMonths, subMonths, getWeek, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,6 +27,21 @@ export default function AgendaPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
   
+  // Billing modal state
+  const [billingModalOpen, setBillingModalOpen] = useState(false);
+  const [selectedAppointmentForBilling, setSelectedAppointmentForBilling] = useState<Appointment | null>(null);
+  const [billingData, setBillingData] = useState({
+    amount: '',
+    method: 'Dinheiro',
+    description: '',
+  });
+  const [billingInfo, setBillingInfo] = useState<{
+    procedureName?: string;
+    suggestedAmount?: number;
+  } | null>(null);
+  const [loadingBillingData, setLoadingBillingData] = useState(false);
+  const [processingBilling, setProcessingBilling] = useState(false);
+  
   // Availability data
   const [scheduleConfigs, setScheduleConfigs] = useState<ScheduleConfig[]>([]);
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
@@ -36,9 +52,12 @@ export default function AgendaPage() {
   // Form state
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Staff[]>([]);
+  const [availableProcedures, setAvailableProcedures] = useState<Procedure[]>([]);
+  const [loadingProcedures, setLoadingProcedures] = useState(false);
   const [formData, setFormData] = useState({
     patientId: '',
     doctorId: '',
+    procedureId: '',
     startTime: '',
     endTime: '',
     notes: '',
@@ -246,6 +265,11 @@ export default function AgendaPage() {
       toast.error('Selecione um médico');
       return false;
     }
+
+    if (!formData.procedureId) {
+      toast.error('Selecione um procedimento');
+      return false;
+    }
     if (!formData.startTime || !formData.endTime) {
       toast.error('Preencha os horários de início e fim');
       return false;
@@ -292,6 +316,7 @@ export default function AgendaPage() {
       const payload = {
         patientId: formData.patientId,
         staffId: formData.doctorId,
+        procedureId: formData.procedureId,
         startTime: new Date(`${dateStr}T${formData.startTime}:00`).toISOString(),
         endTime: new Date(`${dateStr}T${formData.endTime}:00`).toISOString(),
         observations: formData.notes || undefined,
@@ -313,8 +338,41 @@ export default function AgendaPage() {
   };
 
   const resetForm = () => {
-    setFormData({ patientId: '', doctorId: '', startTime: '', endTime: '', notes: '' });
+    setFormData({ patientId: '', doctorId: '', procedureId: '', startTime: '', endTime: '', notes: '' });
+    setAvailableProcedures([]);
   };
+
+  // Buscar procedimentos quando médico for selecionado
+  useEffect(() => {
+    const fetchProcedures = async () => {
+      if (!formData.doctorId) {
+        setAvailableProcedures([]);
+        setFormData(prev => ({ ...prev, procedureId: '' }));
+        return;
+      }
+
+      setLoadingProcedures(true);
+      try {
+        const procedures = await staffService.getProcedures(formData.doctorId);
+        setAvailableProcedures(procedures);
+        
+        // Se houver apenas um procedimento, selecionar automaticamente
+        if (procedures.length === 1) {
+          setFormData(prev => ({ ...prev, procedureId: procedures[0].id }));
+        } else {
+          setFormData(prev => ({ ...prev, procedureId: '' }));
+        }
+      } catch (error: any) {
+        console.error('Erro ao buscar procedimentos:', error);
+        toast.error('Erro ao carregar procedimentos do profissional');
+        setAvailableProcedures([]);
+      } finally {
+        setLoadingProcedures(false);
+      }
+    };
+
+    fetchProcedures();
+  }, [formData.doctorId]);
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
@@ -346,6 +404,94 @@ export default function AgendaPage() {
       fetchAppointments();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao excluir agendamento');
+    }
+  };
+
+  const handleOpenBillingModal = async (appointment: Appointment) => {
+    setSelectedAppointmentForBilling(appointment);
+    setBillingModalOpen(true);
+    setLoadingBillingData(true);
+    
+    try {
+      const data = await financeService.checkAppointmentBilling(appointment.id);
+      
+      if (data.alreadyBilled) {
+        toast.error('Este agendamento já foi faturado.');
+        setBillingModalOpen(false);
+        return;
+      }
+
+      // Salvar informações do procedimento
+      const procedureName = data.appointment?.procedureName || data.appointment?.type || 'Consulta';
+      setBillingInfo({
+        procedureName: procedureName,
+        suggestedAmount: data.suggestedAmount || null,
+      });
+
+      // Pré-preencher valor se disponível (formato brasileiro com vírgula)
+      if (data.suggestedAmount) {
+        // Formatar com 2 decimais e vírgula
+        const formattedAmount = Number(data.suggestedAmount).toFixed(2).replace('.', ',');
+        setBillingData(prev => ({
+          ...prev,
+          amount: formattedAmount,
+        }));
+      } else {
+        // Limpar valor se não houver sugestão
+        setBillingData(prev => ({
+          ...prev,
+          amount: '',
+        }));
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao carregar dados do agendamento');
+      console.error(error);
+    } finally {
+      setLoadingBillingData(false);
+    }
+  };
+
+  const handleProcessBilling = async () => {
+    if (!selectedAppointmentForBilling) return;
+
+    // Converter vírgula para ponto para cálculo
+    const numericAmount = Number(billingData.amount.replace(',', '.'));
+    if (!billingData.amount || isNaN(numericAmount) || numericAmount <= 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+
+    setProcessingBilling(true);
+    try {
+      // Criar descrição automática se não fornecida
+      const patientName = selectedAppointmentForBilling.patient?.name || 'Paciente';
+      const procedureName = billingInfo?.procedureName || selectedAppointmentForBilling.type || 'Consulta';
+      const autoDescription = billingData.description || `${procedureName} - ${patientName}`;
+
+      console.log('Criando transação com descrição:', autoDescription);
+      const result = await financeService.createTransaction({
+        type: 'INCOME',
+        category: procedureName,
+        amount: numericAmount,
+        method: billingData.method,
+        description: autoDescription,
+        appointmentId: selectedAppointmentForBilling.id,
+        patientId: selectedAppointmentForBilling.patientId,
+        staffId: selectedAppointmentForBilling.staffId,
+      });
+      console.log('Transação criada:', result);
+
+      toast.success('Faturamento realizado com sucesso!');
+      setBillingModalOpen(false);
+      setBillingData({ amount: '', method: 'Dinheiro', description: '' });
+      setBillingInfo(null);
+      setSelectedAppointmentForBilling(null);
+      fetchAppointments(); // Recarregar lista
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Erro ao processar faturamento';
+      toast.error(message);
+    } finally {
+      setProcessingBilling(false);
     }
   };
 
@@ -442,6 +588,16 @@ export default function AgendaPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'receptionist') && 
+                     apt.status !== 'cancelled' && apt.status !== 'canceled' && apt.status !== 'completed' && (
+                      <button
+                        onClick={() => handleOpenBillingModal(apt)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Faturar"
+                      >
+                        <DollarSign className="h-5 w-5" />
+                      </button>
+                    )}
                     {(apt.status === 'PENDING' || apt.status === 'scheduled') && (
                       <button
                         onClick={() => updateStatus(apt.id, 'confirmed')}
@@ -972,12 +1128,43 @@ export default function AgendaPage() {
                   <select
                     required
                     value={formData.doctorId}
-                    onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, doctorId: e.target.value, procedureId: '' })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="">Selecione um médico</option>
                     {doctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Procedimento <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.procedureId}
+                    onChange={(e) => setFormData({ ...formData, procedureId: e.target.value })}
+                    disabled={!formData.doctorId || loadingProcedures}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {loadingProcedures 
+                        ? 'Carregando procedimentos...' 
+                        : !formData.doctorId 
+                        ? 'Selecione um médico primeiro' 
+                        : availableProcedures.length === 0
+                        ? 'Nenhum procedimento disponível'
+                        : 'Selecione um procedimento'}
+                    </option>
+                    {availableProcedures.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.grossAmount)}
+                      </option>
+                    ))}
+                  </select>
+                  {!formData.doctorId && (
+                    <p className="mt-1 text-xs text-gray-500">Selecione um médico para ver os procedimentos disponíveis</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1030,6 +1217,165 @@ export default function AgendaPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Faturamento */}
+      {billingModalOpen && selectedAppointmentForBilling && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Faturar Agendamento</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {format(new Date(selectedAppointmentForBilling.startTime), "EEEE, dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setBillingModalOpen(false);
+                  setBillingData({ amount: '', method: 'Dinheiro', description: '' });
+                  setBillingInfo(null);
+                  setSelectedAppointmentForBilling(null);
+                }} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+              {loadingBillingData ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                </div>
+              ) : (
+                <>
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-500">Paciente</p>
+                      <p className="font-semibold text-gray-900">{selectedAppointmentForBilling.patient?.name || 'N/A'}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-500">Profissional</p>
+                      <p className="font-semibold text-gray-900">
+                        {selectedAppointmentForBilling.staff?.name || selectedAppointmentForBilling.doctor?.name || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-500">Procedimento</p>
+                      <p className="font-semibold text-gray-900">
+                        {billingInfo?.procedureName || selectedAppointmentForBilling.type || 'Consulta'}
+                      </p>
+                      {billingInfo?.suggestedAmount && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Valor sugerido: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(billingInfo.suggestedAmount)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Valor <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={billingData.amount}
+                      onChange={(e) => {
+                        // Permitir apenas números, vírgula e ponto
+                        const value = e.target.value.replace(/[^\d,.-]/g, '');
+                        // Converter vírgula para ponto internamente, mas exibir vírgula
+                        setBillingData(prev => ({ ...prev, amount: value }));
+                      }}
+                      onBlur={(e) => {
+                        // Converter vírgula para ponto para cálculo
+                        const numericValue = e.target.value.replace(',', '.');
+                        if (numericValue && !isNaN(Number(numericValue))) {
+                          // Formatar com 2 decimais
+                          const formatted = Number(numericValue).toFixed(2).replace('.', ',');
+                          setBillingData(prev => ({ ...prev, amount: formatted }));
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      placeholder="0,00"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Método de Pagamento <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={billingData.method}
+                      onChange={(e) => setBillingData(prev => ({ ...prev, method: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      required
+                    >
+                      <option value="Dinheiro">Dinheiro</option>
+                      <option value="Cartão de Débito">Cartão de Débito</option>
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="PIX">PIX</option>
+                      <option value="Transferência">Transferência</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Observações (opcional)
+                    </label>
+                    <textarea
+                      value={billingData.description}
+                      onChange={(e) => setBillingData(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      rows={3}
+                      placeholder="Observações sobre o pagamento..."
+                    />
+                  </div>
+
+                </>
+              )}
+            </div>
+
+            {/* Footer fixo */}
+            <div className="p-6 border-t border-gray-100 flex gap-3 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setBillingModalOpen(false);
+                  setBillingData({ amount: '', method: 'Dinheiro', description: '' });
+                  setBillingInfo(null);
+                  setSelectedAppointmentForBilling(null);
+                }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={processingBilling}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleProcessBilling}
+                disabled={processingBilling || !billingData.amount || Number(billingData.amount.replace(',', '.')) <= 0}
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition-colors shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {processingBilling ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  <>
+                    <DollarSign className="h-4 w-4" />
+                    Confirmar Faturamento
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
