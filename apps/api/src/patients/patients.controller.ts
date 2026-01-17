@@ -35,12 +35,15 @@ export class PatientsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
-  update(
+  async update(
     @Req() req: any,
     @Param('id') id: string,
     @Body() updatePatientDto: any,
   ) {
-    return this.patientsService.update(req.tenantId, id, updatePatientDto);
+    console.log('[PatientsController.update] Recebido:', { id, body: updatePatientDto });
+    const result = await this.patientsService.update(req.tenantId, id, updatePatientDto);
+    console.log('[PatientsController.update] Resultado:', { id: result.id, allergies: result.allergies, medications: result.medications });
+    return result;
   }
 
   @Delete(':id')

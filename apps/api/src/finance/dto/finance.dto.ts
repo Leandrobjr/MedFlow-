@@ -37,6 +37,32 @@ export class CreateTransactionDto {
   @IsUUID()
   @IsOptional()
   staffId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
+}
+
+export class UpdateTransactionDto {
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsNumber()
+  @IsOptional()
+  amount?: number;
+
+  @IsString()
+  @IsOptional()
+  method?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
 }
 
 export class CreateClosureDto {
@@ -53,4 +79,84 @@ export class CreateClosureDto {
   observations?: string;
 }
 
+export class CloseReceptionistBoxDto {
+  @IsDateString()
+  @IsNotEmpty()
+  date: string;
 
+  @IsNumber()
+  @IsNotEmpty()
+  initialBalance: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  finalBalance: number;
+
+  @IsNumber()
+  @IsOptional()
+  cashCount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  cardCount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  pixCount?: number;
+
+  @IsString()
+  @IsOptional()
+  observations?: string;
+}
+
+export class CloseAdminBoxDto {
+  @IsDateString()
+  @IsNotEmpty()
+  date: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  initialBalance: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  finalBalance: number;
+
+  @IsNumber()
+  @IsOptional()
+  cashCount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  cardCount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  pixCount?: number;
+
+  @IsString()
+  @IsOptional()
+  observations?: string;
+}
+
+export class CloseMedicalFeePaymentDto {
+  @IsUUID()
+  @IsNotEmpty()
+  staffId: string;
+
+  @IsDateString()
+  @IsNotEmpty()
+  periodStart: string;
+
+  @IsDateString()
+  @IsNotEmpty()
+  periodEnd: string;
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  observations?: string;
+}

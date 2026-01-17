@@ -35,6 +35,14 @@ export default function PEPPage() {
   });
   const [addendumText, setAddendumText] = useState('');
   const [savingAddendum, setSavingAddendum] = useState(false);
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(true); // Novo prontuário começa com mudanças não salvas
+  
+  // Estado para guardar os valores ORIGINAIS do banco (para comparação no onBlur)
+  const [originalPatientData, setOriginalPatientData] = useState<{ allergies: string; medications: string }>({
+    allergies: '',
+    medications: '',
+  });
 
   const fetchPatients = async () => {
     setLoading(true);
@@ -72,41 +80,75 @@ export default function PEPPage() {
     if (patientIdParam && patients.length > 0) {
       const patient = patients.find(p => p.id === patientIdParam);
       if (patient) {
-        setSelectedPatient(patient);
-        setViewMode('timeline');
-        
-        // Buscar prontuários do paciente
-        fetchRecords(patientIdParam).then(async () => {
-          // Se tiver appointmentId, buscar prontuário específico desse appointment
-          if (appointmentIdParam) {
-            // Buscar novamente para garantir que temos os dados atualizados
-            const allRecords = await pepService.getByPatient(patientIdParam);
-            setRecords(allRecords);
+        // Carregar dados completos do paciente do backend para garantir que alergias e medicamentos estão atualizados
+        patientService.getById(patientIdParam)
+          .then((fullPatientData) => {
+            setSelectedPatient(fullPatientData);
+            setOriginalPatientData({
+              allergies: fullPatientData.allergies || '',
+              medications: fullPatientData.medications || '',
+            });
+            setViewMode('timeline');
             
-            const record = allRecords.find(r => r.appointmentId === appointmentIdParam);
-            if (record) {
-              handleOpenRecord(record);
-            } else {
-              // Se não existir prontuário, apenas mostrar mensagem
-              // O profissional pode criar manualmente se necessário
-              toast('Prontuário ainda não foi criado. Você pode criar um novo prontuário para este atendimento.', {
-                icon: 'ℹ️',
-              });
-            }
-          }
-        });
+            // Buscar prontuários do paciente
+            fetchRecords(patientIdParam).then(async () => {
+              // Se tiver appointmentId, buscar prontuário específico desse appointment
+              if (appointmentIdParam) {
+                // Buscar novamente para garantir que temos os dados atualizados
+                const allRecords = await pepService.getByPatient(patientIdParam);
+                setRecords(allRecords);
+                
+                const record = allRecords.find(r => r.appointmentId === appointmentIdParam);
+                if (record) {
+                  handleOpenRecord(record);
+                }
+              }
+            });
+          })
+          .catch((error) => {
+            console.error('Erro ao carregar dados do paciente:', error);
+            // Fallback: usar dados básicos do paciente da lista
+            setSelectedPatient(patient);
+            setOriginalPatientData({
+              allergies: patient.allergies || '',
+              medications: patient.medications || '',
+            });
+            setViewMode('timeline');
+            fetchRecords(patientIdParam);
+          });
       }
     }
   }, [searchParams, patients]);
 
-  const handleSelectPatient = (patient: Patient) => {
-    setSelectedPatient(patient);
+  const handleSelectPatient = async (patient: Patient) => {
+    // Carregar dados completos do paciente do backend para garantir que alergias e medicamentos estão atualizados
+    try {
+      const fullPatientData = await patientService.getById(patient.id);
+      setSelectedPatient(fullPatientData);
+      setOriginalPatientData({
+        allergies: fullPatientData.allergies || '',
+        medications: fullPatientData.medications || '',
+      });
+    } catch (error) {
+      console.error('Erro ao carregar dados do paciente:', error);
+      // Fallback: usar dados básicos do paciente da lista
+      setSelectedPatient(patient);
+      setOriginalPatientData({
+        allergies: patient.allergies || '',
+        medications: patient.medications || '',
+      });
+    }
     fetchRecords(patient.id);
     setViewMode('timeline');
   };
 
-  const handleOpenRecord = (record: MedicalRecord) => {
+  // REMOVIDO: useEffect que recarregava dados do paciente quando o ID mudava
+  // Isso causava problemas pois poderia sobrescrever edições locais com dados antigos do servidor
+  // Agora os dados são carregados apenas via handleSelectPatient e handleOpenRecord
+
+  const handleOpenRecord = async (record: MedicalRecord) => {
     setSelectedRecord(record);
+    // Sempre carregar os dados do prontuário (campos da consulta)
     setFormData({
       anamnesis: record.anamnesis || '',
       physicalExam: record.physicalExam || '',
@@ -114,25 +156,69 @@ export default function PEPPage() {
       prescription: record.prescription || '',
       conduct: record.conduct || '',
     });
+    
+    // Verificar se é um prontuário novo (sem dados) ou existente (com dados)
+    const isNewRecord = !record.anamnesis && !record.physicalExam && !record.diagnosis && !record.prescription && !record.conduct;
+    setHasUnsavedChanges(isNewRecord); // Prontuário novo precisa ser salvo; existente não
+    
+    // Garantir que os dados do paciente estão atualizados (alergias e medicamentos)
+    if (selectedPatient?.id) {
+      try {
+        console.log('[PEP] Carregando dados do paciente:', selectedPatient.id);
+        const updatedPatient = await patientService.getById(selectedPatient.id);
+        console.log('[PEP] Dados do paciente carregados:', {
+          id: updatedPatient?.id,
+          name: updatedPatient?.name,
+          allergies: updatedPatient?.allergies,
+          medications: updatedPatient?.medications,
+        });
+        setSelectedPatient(updatedPatient);
+        // Guardar valores originais para comparação no onBlur
+        setOriginalPatientData({
+          allergies: updatedPatient.allergies || '',
+          medications: updatedPatient.medications || '',
+        });
+      } catch (error) {
+        console.error('Erro ao carregar dados atualizados do paciente:', error);
+      }
+    }
+    
     setViewMode('editor');
   };
 
   const handleSaveRecord = async () => {
-    if (!selectedRecord) return;
+    if (!selectedRecord) {
+      toast.error('Nenhum prontuário selecionado');
+      return;
+    }
     
     if (selectedRecord.isFinalized) {
       toast.error('Este prontuário já foi finalizado e não pode ser editado. Use Adendos para correções.');
       return;
     }
+
+    if (savingRecord) {
+      return; // Evitar duplo clique
+    }
+    
+    setSavingRecord(true);
     
     try {
+      console.log('[PEP] Iniciando salvamento do prontuário:', { 
+        recordId: selectedRecord.id, 
+        formData,
+        patientId: selectedPatient?.id 
+      });
+      
       // Atualizar e obter o registro atualizado
       const updatedRecord = await pepService.update(selectedRecord.id, formData);
+      
+      console.log('[PEP] Prontuário atualizado com sucesso:', updatedRecord);
       
       // Atualizar selectedRecord com os dados retornados
       setSelectedRecord(updatedRecord);
       
-      // Atualizar formData com os dados salvos
+      // Atualizar formData com os dados salvos (garantir que está sincronizado)
       setFormData({
         anamnesis: updatedRecord.anamnesis || '',
         physicalExam: updatedRecord.physicalExam || '',
@@ -141,13 +227,30 @@ export default function PEPPage() {
         conduct: updatedRecord.conduct || '',
       });
       
-      // Atualizar lista de registros
-      await fetchRecords(selectedPatient!.id);
+      // Atualizar lista de registros para refletir as mudanças
+      if (selectedPatient?.id) {
+        await fetchRecords(selectedPatient.id);
+      }
+      
+      // Recarregar o registro selecionado para garantir que temos os dados mais recentes
+      const refreshedRecord = await pepService.getById(selectedRecord.id);
+      setSelectedRecord(refreshedRecord);
+      
+      // Marcar que não há mais mudanças não salvas
+      setHasUnsavedChanges(false);
       
       toast.success('Prontuário salvo com sucesso!');
     } catch (error: any) {
+      console.error('[PEP] Erro ao salvar prontuário:', error);
+      console.error('[PEP] Detalhes do erro:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
       const message = error.response?.data?.message || error.response?.data?.error || 'Erro ao salvar prontuário';
       toast.error(message);
+    } finally {
+      setSavingRecord(false);
     }
   };
 
@@ -171,7 +274,9 @@ export default function PEPPage() {
     
     try {
       await pepService.finalize(selectedRecord.id);
-      toast.success('Prontuário finalizado e assinado!');
+      toast.success('✅ Prontuário finalizado com sucesso! Repasse médico gerado automaticamente.', {
+        duration: 4000,
+      });
       fetchRecords(selectedPatient!.id);
       setViewMode('timeline');
     } catch (error: any) {
@@ -230,7 +335,15 @@ export default function PEPPage() {
       // Atualizar lista de prontuários
       await fetchRecords(selectedPatient.id);
       
-      // Abrir o prontuário no editor
+      // Recarregar dados atualizados do paciente para garantir que alergias e medicamentos estão atualizados
+      const updatedPatient = await patientService.getById(selectedPatient.id);
+      setSelectedPatient(updatedPatient);
+      setOriginalPatientData({
+        allergies: updatedPatient.allergies || '',
+        medications: updatedPatient.medications || '',
+      });
+      
+      // Abrir o prontuário no editor (campos do prontuário ficam em branco, mas dados do paciente aparecem)
       handleOpenRecord(newRecord);
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error || 'Erro ao criar prontuário';
@@ -430,7 +543,10 @@ export default function PEPPage() {
               <textarea
                 disabled={isLocked}
                 value={formData.anamnesis}
-                onChange={(e) => setFormData({...formData, anamnesis: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, anamnesis: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
                 placeholder="História da doença atual, sintomas, histórico familiar..."
                 className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
               />
@@ -441,7 +557,10 @@ export default function PEPPage() {
               <textarea
                 disabled={isLocked}
                 value={formData.physicalExam}
-                onChange={(e) => setFormData({...formData, physicalExam: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, physicalExam: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
                 placeholder="Sinais vitais, observações do exame físico..."
                 className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
               />
@@ -453,7 +572,10 @@ export default function PEPPage() {
                 <textarea
                   disabled={isLocked}
                   value={formData.diagnosis}
-                  onChange={(e) => setFormData({...formData, diagnosis: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, diagnosis: e.target.value});
+                    setHasUnsavedChanges(true);
+                  }}
                   className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
                 />
               </section>
@@ -463,7 +585,10 @@ export default function PEPPage() {
                 <textarea
                   disabled={isLocked}
                   value={formData.prescription}
-                  onChange={(e) => setFormData({...formData, prescription: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, prescription: e.target.value});
+                    setHasUnsavedChanges(true);
+                  }}
                   placeholder="Medicamentos, dosagens, orientações..."
                   className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
                 />
@@ -475,76 +600,98 @@ export default function PEPPage() {
               <textarea
                 disabled={isLocked}
                 value={formData.conduct}
-                onChange={(e) => setFormData({...formData, conduct: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, conduct: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
                 placeholder="Encaminhamentos, exames solicitados, retorno..."
                 className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
               />
             </section>
 
-            {/* Seção de Informações do Paciente */}
+            {/* Seção de Informações do Paciente - SEMPRE editável (dados do paciente, não do prontuário) */}
             <section className="space-y-4 pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">Informações do Paciente</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                Informações do Paciente
+                <span className="ml-2 text-xs font-normal text-gray-500">(salva automaticamente ao editar)</span>
+              </h3>
               
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Alergias
-                </label>
-                <textarea
-                  value={selectedPatient?.allergies || ''}
-                  onChange={(e) => {
-                    if (!selectedPatient) return;
-                    // Atualizar apenas o estado local para permitir digitação fluida
-                    setSelectedPatient({ ...selectedPatient, allergies: e.target.value });
-                  }}
-                  onBlur={async (e) => {
-                    if (!selectedPatient) return;
-                    const newValue = e.target.value;
-                    // Só salvar se o valor mudou
-                    if (newValue !== (selectedPatient.allergies || '')) {
-                      try {
-                        await patientService.update(selectedPatient.id, { allergies: newValue });
-                        toast.success('Alergias atualizadas!');
-                      } catch (error: any) {
-                        toast.error('Erro ao atualizar alergias');
-                        // Reverter para o valor anterior em caso de erro
-                        setSelectedPatient({ ...selectedPatient, allergies: selectedPatient.allergies || '' });
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-blue-600 uppercase mb-1">
+                    Alergias
+                  </label>
+                  <textarea
+                    value={selectedPatient?.allergies || ''}
+                    onChange={(e) => {
+                      if (!selectedPatient) return;
+                      setSelectedPatient({ ...selectedPatient, allergies: e.target.value });
+                    }}
+                    onBlur={async (e) => {
+                      if (!selectedPatient) return;
+                      const newValue = e.target.value.trim();
+                      // Comparar com o valor ORIGINAL do banco, não com o estado local
+                      const originalValue = originalPatientData.allergies.trim();
+                      console.log('[PEP] onBlur Alergias - comparando com ORIGINAL:', { newValue, originalValue, mudou: newValue !== originalValue });
+                      if (newValue !== originalValue) {
+                        try {
+                          console.log('[PEP] Salvando alergias para paciente:', selectedPatient.id, '- valor:', newValue);
+                          const updatedPatient = await patientService.update(selectedPatient.id, { allergies: newValue });
+                          console.log('[PEP] Resposta do servidor - alergias salvas:', updatedPatient.allergies);
+                          toast.success('Alergias atualizadas!');
+                          // Atualizar os dados originais com o valor salvo
+                          setOriginalPatientData(prev => ({ ...prev, allergies: updatedPatient.allergies || '' }));
+                          setSelectedPatient(updatedPatient);
+                        } catch (error: any) {
+                          console.error('[PEP] Erro ao salvar alergias:', error);
+                          toast.error('Erro ao atualizar alergias');
+                          // Reverter para o valor original do banco
+                          setSelectedPatient({ ...selectedPatient, allergies: originalValue });
+                        }
                       }
-                    }
-                  }}
-                  placeholder="Informe as alergias do paciente..."
-                  className="w-full h-20 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
-                />
-              </div>
+                    }}
+                    placeholder="Informe as alergias do paciente..."
+                    className="w-full h-16 p-3 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Medicamentos Contínuos
-                </label>
-                <textarea
-                  value={selectedPatient?.medications || ''}
-                  onChange={(e) => {
-                    if (!selectedPatient) return;
-                    // Atualizar apenas o estado local para permitir digitação fluida
-                    setSelectedPatient({ ...selectedPatient, medications: e.target.value });
-                  }}
-                  onBlur={async (e) => {
-                    if (!selectedPatient) return;
-                    const newValue = e.target.value;
-                    // Só salvar se o valor mudou
-                    if (newValue !== (selectedPatient.medications || '')) {
-                      try {
-                        await patientService.update(selectedPatient.id, { medications: newValue });
-                        toast.success('Medicamentos atualizados!');
-                      } catch (error: any) {
-                        toast.error('Erro ao atualizar medicamentos');
-                        // Reverter para o valor anterior em caso de erro
-                        setSelectedPatient({ ...selectedPatient, medications: selectedPatient.medications || '' });
+                <div>
+                  <label className="block text-xs font-bold text-blue-600 uppercase mb-1">
+                    Medicamentos Contínuos
+                  </label>
+                  <textarea
+                    value={selectedPatient?.medications || ''}
+                    onChange={(e) => {
+                      if (!selectedPatient) return;
+                      setSelectedPatient({ ...selectedPatient, medications: e.target.value });
+                    }}
+                    onBlur={async (e) => {
+                      if (!selectedPatient) return;
+                      const newValue = e.target.value.trim();
+                      // Comparar com o valor ORIGINAL do banco, não com o estado local
+                      const originalValue = originalPatientData.medications.trim();
+                      console.log('[PEP] onBlur Medicamentos - comparando com ORIGINAL:', { newValue, originalValue, mudou: newValue !== originalValue });
+                      if (newValue !== originalValue) {
+                        try {
+                          console.log('[PEP] Salvando medicamentos para paciente:', selectedPatient.id, '- valor:', newValue);
+                          const updatedPatient = await patientService.update(selectedPatient.id, { medications: newValue });
+                          console.log('[PEP] Resposta do servidor - medicamentos salvos:', updatedPatient.medications);
+                          toast.success('Medicamentos atualizados!');
+                          // Atualizar os dados originais com o valor salvo
+                          setOriginalPatientData(prev => ({ ...prev, medications: updatedPatient.medications || '' }));
+                          setSelectedPatient(updatedPatient);
+                        } catch (error: any) {
+                          console.error('[PEP] Erro ao salvar medicamentos:', error);
+                          toast.error('Erro ao atualizar medicamentos');
+                          // Reverter para o valor original do banco
+                          setSelectedPatient({ ...selectedPatient, medications: originalValue });
+                        }
                       }
-                    }
-                  }}
-                  placeholder="Informe os medicamentos contínuos do paciente..."
-                  className="w-full h-20 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
-                />
+                    }}
+                    placeholder="Informe os medicamentos contínuos do paciente..."
+                    className="w-full h-16 p-3 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                  />
+                </div>
               </div>
             </section>
 
@@ -552,15 +699,28 @@ export default function PEPPage() {
               <div className="pt-6 flex gap-4">
                 <button
                   onClick={handleSaveRecord}
-                  className="flex-1 px-6 py-3 border border-blue-600 text-blue-600 font-bold rounded-xl hover:bg-blue-50 transition-colors"
+                  disabled={savingRecord}
+                  className="flex-1 px-6 py-3 border border-blue-600 text-blue-600 font-bold rounded-xl hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
-                  Salvar Rascunho
+                  {savingRecord ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    'Salvar Rascunho'
+                  )}
                 </button>
                 <button
                   onClick={handleFinalizeRecord}
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"
+                  disabled={savingRecord || hasUnsavedChanges}
+                  title={hasUnsavedChanges ? 'Salve o rascunho antes de finalizar' : 'Finalizar e assinar digitalmente o prontuário'}
+                  className={`flex-1 px-6 py-3 font-bold rounded-xl transition-colors shadow-lg disabled:cursor-not-allowed ${
+                    hasUnsavedChanges 
+                      ? 'bg-gray-300 text-gray-500 shadow-gray-100' 
+                      : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100 disabled:opacity-50'
+                  }`}
                 >
-                  Finalizar e Assinar
+                  {hasUnsavedChanges ? '⚠️ Salve primeiro' : 'Finalizar e Assinar'}
                 </button>
               </div>
             )}

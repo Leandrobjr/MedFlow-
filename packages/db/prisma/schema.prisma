@@ -18,18 +18,20 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users          User[]
-  patients       Patient[]
-  staff          Staff[]
-  appointments   Appointment[]
-  medicalRecords MedicalRecord[]
-  transactions   Transaction[]
-  dailyClosures  DailyClosure[]
-  medicalFees    MedicalFee[]
-  scheduleConfigs ScheduleConfig[]
-  scheduleBlocks ScheduleBlock[]
-  procedures     Procedure[]
-  suppliers      Supplier[]
+  users              User[]
+  patients           Patient[]
+  staff              Staff[]
+  appointments       Appointment[]
+  medicalRecords     MedicalRecord[]
+  transactions       Transaction[]
+  dailyClosures      DailyClosure[]
+  medicalFees        MedicalFee[]
+  medicalFeePayments MedicalFeePayment[]
+  scheduleConfigs    ScheduleConfig[]
+  scheduleBlocks     ScheduleBlock[]
+  procedures         Procedure[]
+  suppliers          Supplier[]
+  expenseCategories  ExpenseCategory[]
 
   @@map("tenants")
 }
@@ -45,9 +47,11 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  staffProfile Staff?
-  createdTransactions Transaction[] @relation("TransactionCreatedBy")
+  tenant                 Tenant              @relation(fields: [tenantId], references: [id])
+  staffProfile           Staff?
+  createdTransactions    Transaction[]       @relation("TransactionCreatedBy")
+  closedDailyClosures    DailyClosure[]      @relation("ClosureCreatedBy")
+  paidMedicalFeePayments MedicalFeePayment[]
 
   @@map("users")
 }
@@ -70,103 +74,103 @@ model Patient {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
-  appointments Appointment[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  appointments   Appointment[]
   medicalRecords MedicalRecord[]
-  transactions Transaction[]
+  transactions   Transaction[]
 
   @@map("patients")
 }
 
 model Staff {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String?  @unique @map("user_id") @db.Uuid
-  name           String
-  email          String?
-  phone          String?
-  role           String   // doctor, receptionist, admin, manager
-  specialty      String?  // Apenas para médicos/especialistas
-  crm            String?  // Registro profissional (CRM, CRP, CREFITO, etc)
-  crmState       String?  @map("crm_state")
-  rqe            String?  // Registro de Especialização
-  rqeState       String?  @map("rqe_state")
-  
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String? @unique @map("user_id") @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  role      String // doctor, receptionist, admin, manager
+  specialty String? // Apenas para médicos/especialistas
+  crm       String? // Registro profissional (CRM, CRP, CREFITO, etc)
+  crmState  String? @map("crm_state")
+  rqe       String? // Registro de Especialização
+  rqeState  String? @map("rqe_state")
+
   // Regras de Repasse
   commissionType  String   @default("PERCENTAGE") @map("commission_type") // PERCENTAGE, FIXED
   commissionRate  Decimal? @default(0) @map("commission_rate") @db.Decimal(5, 2) // Porcentagem (ex: 70.00 para 70%)
   fixedCommission Decimal? @default(0) @map("fixed_commission") @db.Decimal(10, 2) // Valor fixo por atendimento
-  
-  tenantId       String   @map("tenant_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  user           User?           @relation(fields: [userId], references: [id])
-  appointments   Appointment[]
-  medicalRecords MedicalRecord[]
-  transactions   Transaction[]
-  closedCaixas   DailyClosure[]
-  medicalFees    MedicalFee[]
-  scheduleConfig ScheduleConfig?
-  scheduleBlocks ScheduleBlock[]
-  staffProcedures StaffProcedure[]
+  tenantId  String   @map("tenant_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
+  appointments       Appointment[]
+  medicalRecords     MedicalRecord[]
+  transactions       Transaction[]
+  medicalFees        MedicalFee[]
+  medicalFeePayments MedicalFeePayment[]
+  scheduleConfig     ScheduleConfig?
+  scheduleBlocks     ScheduleBlock[]
+  staffProcedures    StaffProcedure[]
 
   @@map("staff")
 }
 
 model Appointment {
-  id          String   @id @default(uuid()) @db.Uuid
-  patientId   String   @map("patient_id") @db.Uuid
-  staffId     String   @map("staff_id") @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  procedureId String   @map("procedure_id") @db.Uuid
-  startTime   DateTime @map("start_time")
-  endTime     DateTime @map("end_time")
-  status      String   @default("scheduled")
-  type        String   @default("consultation")
+  id           String   @id @default(uuid()) @db.Uuid
+  patientId    String   @map("patient_id") @db.Uuid
+  staffId      String   @map("staff_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  procedureId  String   @map("procedure_id") @db.Uuid
+  startTime    DateTime @map("start_time")
+  endTime      DateTime @map("end_time")
+  status       String   @default("scheduled")
+  type         String   @default("consultation")
   observations String?  @db.Text
-  
-  googleEventId String? @map("google_event_id")
-  
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  staff       Staff    @relation(fields: [staffId], references: [id])
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  procedure   Procedure @relation(fields: [procedureId], references: [id])
+  googleEventId String? @map("google_event_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  patient       Patient        @relation(fields: [patientId], references: [id])
+  staff         Staff          @relation(fields: [staffId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  procedure     Procedure      @relation(fields: [procedureId], references: [id])
   medicalRecord MedicalRecord?
   transaction   Transaction?
 
-  @@map("appointments")
   @@index([startTime, endTime])
   @@index([staffId, startTime])
+  @@map("appointments")
 }
 
 model MedicalRecord {
-  id            String   @id @default(uuid()) @db.Uuid
-  appointmentId String   @unique @map("appointment_id") @db.Uuid
-  patientId     String   @map("patient_id") @db.Uuid
-  staffId       String   @map("staff_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  
-  anamnesis     String?  @db.Text
-  physicalExam  String?  @map("physical_exam") @db.Text
-  diagnosis     String?  @db.Text
-  prescription  String?  @db.Text
-  conduct       String?  @db.Text
-  
-  isFinalized   Boolean  @default(false) @map("is_finalized")
-  finalizedAt   DateTime? @map("finalized_at")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id            String @id @default(uuid()) @db.Uuid
+  appointmentId String @unique @map("appointment_id") @db.Uuid
+  patientId     String @map("patient_id") @db.Uuid
+  staffId       String @map("staff_id") @db.Uuid
+  tenantId      String @map("tenant_id") @db.Uuid
 
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-  patient       Patient     @relation(fields: [patientId], references: [id])
-  staff         Staff       @relation(fields: [staffId], references: [id])
-  tenant        Tenant      @relation(fields: [tenantId], references: [id])
-  addendums     MedicalAddendum[]
+  anamnesis    String? @db.Text
+  physicalExam String? @map("physical_exam") @db.Text
+  diagnosis    String? @db.Text
+  prescription String? @db.Text
+  conduct      String? @db.Text
+
+  isFinalized Boolean   @default(false) @map("is_finalized")
+  finalizedAt DateTime? @map("finalized_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointment Appointment       @relation(fields: [appointmentId], references: [id])
+  patient     Patient           @relation(fields: [patientId], references: [id])
+  staff       Staff             @relation(fields: [staffId], references: [id])
+  tenant      Tenant            @relation(fields: [tenantId], references: [id])
+  addendums   MedicalAddendum[]
 
   @@map("medical_records")
 }
@@ -176,136 +180,149 @@ model MedicalAddendum {
   medicalRecordId String   @map("medical_record_id") @db.Uuid
   content         String   @db.Text
   createdAt       DateTime @default(now()) @map("created_at")
-  
-  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id])
 
   @@map("medical_addendums")
 }
 
 model Transaction {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  patientId     String?  @map("patient_id") @db.Uuid
-  staffId       String?  @map("staff_id") @db.Uuid
-  appointmentId String?  @unique @map("appointment_id") @db.Uuid
-  createdById   String?  @map("created_by_id") @db.Uuid
-  
-  type          String   
-  category      String   
-  amount        Decimal  @db.Decimal(10, 2)
-  method        String?  
-  description   String?
-  status        String   @default("completed")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  patientId     String? @map("patient_id") @db.Uuid
+  staffId       String? @map("staff_id") @db.Uuid
+  appointmentId String? @unique @map("appointment_id") @db.Uuid
+  createdById   String? @map("created_by_id") @db.Uuid
 
-  tenant        Tenant      @relation(fields: [tenantId], references: [id])
-  patient       Patient?    @relation(fields: [patientId], references: [id])
-  staff         Staff?      @relation(fields: [staffId], references: [id])
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-  createdBy     User?       @relation("TransactionCreatedBy", fields: [createdById], references: [id])
-  medicalFee    MedicalFee?
+  type        String
+  category    String
+  amount      Decimal @db.Decimal(10, 2)
+  method      String?
+  description String?
+  status      String  @default("completed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  patient         Patient?         @relation(fields: [patientId], references: [id])
+  staff           Staff?           @relation(fields: [staffId], references: [id])
+  appointment     Appointment?     @relation(fields: [appointmentId], references: [id])
+  createdBy       User?            @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  medicalFee      MedicalFee?
+  categoryId      String?          @map("category_id") @db.Uuid
+  expenseCategory ExpenseCategory? @relation(fields: [categoryId], references: [id])
 
   @@map("transactions")
 }
 
 model DailyClosure {
-  id              String   @id @default(uuid()) @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  closedById      String   @map("closed_by_id") @db.Uuid
-  
-  date            DateTime @db.Date
-  totalIncome     Decimal  @map("total_income") @db.Decimal(10, 2)
-  totalExpense    Decimal  @map("total_expense") @db.Decimal(10, 2)
-  netBalance      Decimal  @map("net_balance") @db.Decimal(10, 2)
-  
-  observations    String?  @db.Text
-  status          String   @default("closed")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @map("tenant_id") @db.Uuid
+  createdById String @map("created_by_id") @db.Uuid // Recepcionista ou Admin que fechou
+  closureType String @map("closure_type") // 'RECEPTIONIST' | 'ADMIN'
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  closedBy        Staff    @relation(fields: [closedById], references: [id])
+  date           DateTime @db.Date
+  initialBalance Decimal  @map("initial_balance") @db.Decimal(10, 2) // Saldo inicial do dia
+  finalBalance   Decimal  @map("final_balance") @db.Decimal(10, 2) // Saldo final do dia
+  totalIncome    Decimal  @map("total_income") @db.Decimal(10, 2)
+  totalExpense   Decimal  @map("total_expense") @db.Decimal(10, 2)
+  netBalance     Decimal  @map("net_balance") @db.Decimal(10, 2)
 
-  @@unique([tenantId, date])
+  // Campos de conferência física
+  cashCount  Decimal? @map("cash_count") @db.Decimal(10, 2)
+  cardCount  Decimal? @map("card_count") @db.Decimal(10, 2)
+  pixCount   Decimal? @map("pix_count") @db.Decimal(10, 2)
+  difference Decimal? @db.Decimal(10, 2) // Diferença entre contado e calculado
+
+  observations String? @db.Text
+  status       String  @default("closed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  closedBy User   @relation("ClosureCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([tenantId, date, createdById, closureType])
   @@map("daily_closures")
 }
 
 model MedicalFee {
-  id              String   @id @default(uuid()) @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  staffId         String   @map("staff_id") @db.Uuid // O médico que recebe
-  transactionId   String   @unique @map("transaction_id") @db.Uuid // Vínculo com o pagamento original
-  
-  grossAmount     Decimal  @map("gross_amount") @db.Decimal(10, 2) // Valor total pago pelo paciente
-  commissionRate  Decimal  @map("commission_rate") @db.Decimal(5, 2) // Porcentagem aplicada na época
-  feeAmount       Decimal  @map("fee_amount") @db.Decimal(10, 2) // Valor que o médico recebe
-  
-  status          String   @default("pending") // pending, paid, cancelled
-  paidAt          DateTime? @map("paid_at")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  staffId       String  @map("staff_id") @db.Uuid // O médico que recebe
+  transactionId String  @unique @map("transaction_id") @db.Uuid // Vínculo com o pagamento original
+  paymentId     String? @map("payment_id") @db.Uuid // Vínculo com fechamento de repasse
 
-  tenant          Tenant      @relation(fields: [tenantId], references: [id])
-  staff           Staff       @relation(fields: [staffId], references: [id])
-  transaction     Transaction @relation(fields: [transactionId], references: [id])
+  grossAmount    Decimal @map("gross_amount") @db.Decimal(10, 2) // Valor total pago pelo paciente
+  commissionRate Decimal @map("commission_rate") @db.Decimal(5, 2) // Porcentagem aplicada na época
+  feeAmount      Decimal @map("fee_amount") @db.Decimal(10, 2) // Valor que o médico recebe
+
+  status String    @default("pending") // pending, paid, cancelled
+  paidAt DateTime? @map("paid_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  staff       Staff              @relation(fields: [staffId], references: [id])
+  transaction Transaction        @relation(fields: [transactionId], references: [id])
+  payment     MedicalFeePayment? @relation(fields: [paymentId], references: [id])
 
   @@map("medical_fees")
 }
 
 // Configuração de Agenda por Profissional
 model ScheduleConfig {
-  id              String   @id @default(uuid()) @db.Uuid
-  staffId         String   @unique @map("staff_id") @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  
+  id       String @id @default(uuid()) @db.Uuid
+  staffId  String @unique @map("staff_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
   // Duração padrão da consulta em minutos
-  defaultDuration Int      @default(30) @map("default_duration")
-  
+  defaultDuration Int @default(30) @map("default_duration")
+
   // Configuração de dias da semana (JSON: { "monday": { "enabled": true, "periods": [...] }, ... })
   // Cada período: { "start": "08:00", "end": "12:00" }
-  weeklySchedule  String   @db.Text @map("weekly_schedule") // JSON string
-  
-  isActive        Boolean  @default(true) @map("is_active")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  weeklySchedule String @map("weekly_schedule") @db.Text // JSON string
 
-  staff           Staff    @relation(fields: [staffId], references: [id])
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  staff  Staff  @relation(fields: [staffId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("schedule_configs")
 }
 
 // Bloqueios Ocasionais de Agenda
 model ScheduleBlock {
-  id              String   @id @default(uuid()) @db.Uuid
-  staffId         String   @map("staff_id") @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  
+  id       String @id @default(uuid()) @db.Uuid
+  staffId  String @map("staff_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
   // Tipo: "date" (dia inteiro) ou "period" (período específico)
-  blockType       String   @map("block_type") // "date" | "period"
-  
+  blockType String @map("block_type") // "date" | "period"
+
   // Para blockType = "date": apenas startDate é usado
   // Para blockType = "period": startDate e endDate definem o período
-  startDate       DateTime @map("start_date") @db.Date
-  endDate         DateTime? @map("end_date") @db.Date
-  
-  // Para blockType = "period": horários específicos
-  startTime       String?  @map("start_time") // "HH:mm"
-  endTime         String?  @map("end_time")   // "HH:mm"
-  
-  reason          String?  @db.Text // Motivo do bloqueio
-  isRecurring     Boolean  @default(false) @map("is_recurring") // Bloqueio recorrente (ex: feriados)
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  startDate DateTime  @map("start_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
 
-  staff           Staff    @relation(fields: [staffId], references: [id])
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  // Para blockType = "period": horários específicos
+  startTime String? @map("start_time") // "HH:mm"
+  endTime   String? @map("end_time") // "HH:mm"
+
+  reason      String? @db.Text // Motivo do bloqueio
+  isRecurring Boolean @default(false) @map("is_recurring") // Bloqueio recorrente (ex: feriados)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  staff  Staff  @relation(fields: [staffId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([staffId, startDate])
   @@map("schedule_blocks")
@@ -313,48 +330,95 @@ model ScheduleBlock {
 
 // Cadastro de Procedimentos
 model Procedure {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  grossAmount   Decimal  @map("gross_amount") @db.Decimal(10, 2)
-  observations  String?  @db.Text
-  tenantId      String   @map("tenant_id") @db.Uuid
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String  @id @default(uuid()) @db.Uuid
+  name         String
+  grossAmount  Decimal @map("gross_amount") @db.Decimal(10, 2)
+  observations String? @db.Text
+  tenantId     String  @map("tenant_id") @db.Uuid
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
   staffProcedures StaffProcedure[]
-  appointments Appointment[]
+  appointments    Appointment[]
 
   @@map("procedures")
 }
 
 // Cadastro de Fornecedores
 model Supplier {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  contactInfo   String?  @map("contact_info") @db.Text // JSON string com telefone, email, endereço, etc
-  tenantId      String   @map("tenant_id") @db.Uuid
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String
+  contactInfo String? @map("contact_info") @db.Text // JSON string com telefone, email, endereço, etc
+  tenantId    String  @map("tenant_id") @db.Uuid
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("suppliers")
 }
 
 // Relacionamento Many-to-Many: Staff ↔ Procedures
 model StaffProcedure {
-  id          String   @id @default(uuid()) @db.Uuid
-  staffId     String   @map("staff_id") @db.Uuid
-  procedureId String   @map("procedure_id") @db.Uuid
-  
-  createdAt   DateTime @default(now()) @map("created_at")
+  id          String @id @default(uuid()) @db.Uuid
+  staffId     String @map("staff_id") @db.Uuid
+  procedureId String @map("procedure_id") @db.Uuid
 
-  staff       Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  procedure   Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  staff     Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  procedure Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
 
   @@unique([staffId, procedureId])
   @@map("staff_procedures")
+}
+
+// Categoria de Despesas (hierárquica)
+model ExpenseCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  parentId    String?  @map("parent_id") @db.Uuid
+  name        String
+  code        String // Código único (ex: "OPEX-001", "RH-001")
+  description String?  @db.Text
+  isFixed     Boolean  @default(false) @map("is_fixed") // Despesa fixa vs variável
+  costCenter  String?  @map("cost_center") // Centro de custo (unidade, especialidade, médico)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  parent       ExpenseCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     ExpenseCategory[] @relation("CategoryHierarchy")
+  transactions Transaction[]
+
+  @@unique([tenantId, code])
+  @@map("expense_categories")
+}
+
+// Fechamento de Repasse Médico
+model MedicalFeePayment {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  staffId       String   @map("staff_id") @db.Uuid
+  periodStart   DateTime @map("period_start") @db.Date
+  periodEnd     DateTime @map("period_end") @db.Date
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(10, 2)
+  feesCount     Int      @map("fees_count")
+  paidAt        DateTime @map("paid_at")
+  paidBy        String   @map("paid_by") @db.Uuid // User que processou o pagamento
+  paymentMethod String?  @map("payment_method")
+  observations  String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  staff      Staff        @relation(fields: [staffId], references: [id])
+  paidByUser User         @relation(fields: [paidBy], references: [id])
+  fees       MedicalFee[]
+
+  @@map("medical_fee_payments")
 }

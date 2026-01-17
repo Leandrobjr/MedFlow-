@@ -35,10 +35,25 @@ export class AppointmentsController {
     // Se não for admin/owner e não tiver doctorId explícito, filtrar por staffId do usuário logado
     const userRole = req.user?.role;
     const isAdmin = userRole === 'admin' || userRole === 'owner';
+    const isReceptionist = userRole === 'receptionist';
     const userStaffId = req.user?.staffId;
     
-    // Se não for admin e não passou doctorId, usar staffId do usuário logado
-    const finalDoctorId = doctorId || (!isAdmin && userStaffId ? userStaffId : undefined);
+    // RECEPTIONIST pode ver todos os agendamentos (não filtra por doctorId)
+    // DOCTOR vê apenas os próprios agendamentos
+    // ADMIN/OWNER pode ver todos ou filtrar por doctorId específico
+    let finalDoctorId: string | undefined;
+    
+    if (isReceptionist) {
+      // Recepcionista vê todos os agendamentos, não filtra por doctorId
+      finalDoctorId = undefined;
+    } else if (doctorId) {
+      // Se passou doctorId explicitamente, usar
+      finalDoctorId = doctorId;
+    } else if (!isAdmin && userStaffId) {
+      // Se não for admin e tiver staffId (ex: DOCTOR), filtrar pelos próprios agendamentos
+      finalDoctorId = userStaffId;
+    }
+    // Se for admin e não passou doctorId, finalDoctorId fica undefined (vê todos)
     
     return this.appointmentsService.findAll(req.tenantId, finalDoctorId, date, startDate, endDate);
   }

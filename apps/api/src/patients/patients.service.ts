@@ -36,12 +36,23 @@ export class PatientsService {
   }
 
   async findOne(tenantId: string, id: string) {
-    return this.prisma.client.patient.findFirst({
+    const patient = await this.prisma.client.patient.findFirst({
       where: { id, tenantId },
     });
+    
+    console.log('[PatientsService.findOne] Paciente encontrado:', { 
+      id: patient?.id, 
+      name: patient?.name,
+      allergies: patient?.allergies,
+      medications: patient?.medications,
+    });
+    
+    return patient;
   }
 
   async update(tenantId: string, id: string, updatePatientDto: any) {
+    console.log('[PatientsService.update] Iniciando atualização:', { tenantId, id, updatePatientDto });
+    
     // Se estiver atualizando o CPF, verificar se não existe outro paciente com o mesmo CPF
     if (updatePatientDto.cpf) {
       const existingPatient = await this.prisma.client.patient.findFirst({
@@ -61,10 +72,19 @@ export class PatientsService {
       updatePatientDto.birthDate = new Date(updatePatientDto.birthDate);
     }
     
-    return this.prisma.client.patient.update({
+    const updated = await this.prisma.client.patient.update({
       where: { id, tenantId },
       data: updatePatientDto,
     });
+    
+    console.log('[PatientsService.update] Paciente atualizado:', { 
+      id: updated.id, 
+      name: updated.name,
+      allergies: updated.allergies,
+      medications: updated.medications,
+    });
+    
+    return updated;
   }
 
   async remove(tenantId: string, id: string) {

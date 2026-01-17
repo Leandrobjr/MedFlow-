@@ -16,7 +16,15 @@ export class RolesGuard implements CanActivate {
       return true;
     }
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user.role?.includes(role));
+    
+    // Normalizar role do usuário para uppercase para comparação case-insensitive
+    const userRole = user.role?.toUpperCase();
+    
+    // Verificar se o role do usuário está entre os roles permitidos
+    return requiredRoles.some((role) => {
+      const requiredRole = role.toUpperCase();
+      return userRole === requiredRole;
+    });
   }
 }
 

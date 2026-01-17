@@ -18,6 +18,9 @@ type ViewType = 'day' | 'week' | 'month';
 export default function AgendaPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const isReceptionist = user?.role === 'receptionist';
+  // Recepcionista e Admin podem ver todas as agendas disponíveis
+  const canViewAllSchedules = isAdmin || isReceptionist;
   const userStaffId = user?.staffId || null;
   
   const [view, setView] = useState<ViewType>('day');
@@ -83,10 +86,16 @@ export default function AgendaPage() {
         params.endDate = format(monthEnd, 'yyyy-MM-dd');
       }
       
-      // Se não for admin, usar staffId do usuário logado automaticamente
-      // Se for admin, permitir filtrar por profissional específico se selecionado
-      if (!isAdmin && userStaffId) {
-        // Profissional vê apenas suas próprias agendas
+      // RECEPTIONIST vê todos os agendamentos (não passa doctorId)
+      // DOCTOR vê apenas seus próprios agendamentos
+      // ADMIN pode filtrar por profissional específico ou ver todos
+      const isReceptionist = user?.role === 'receptionist';
+      
+      if (isReceptionist) {
+        // Recepcionista vê todos os agendamentos, não filtra por doctorId
+        // Não passa doctorId nos params
+      } else if (!isAdmin && userStaffId) {
+        // Profissional (DOCTOR) vê apenas suas próprias agendas
         params.doctorId = userStaffId;
       } else if (isAdmin && selectedStaffId && selectedStaffId.trim() !== '') {
         // Admin pode filtrar por profissional específico
@@ -120,9 +129,9 @@ export default function AgendaPage() {
 
   const fetchScheduleConfigs = async () => {
     try {
-      // Buscar configurações: todos os profissionais se admin, apenas do usuário se não admin
+      // Buscar configurações: todos os profissionais se admin/recepcionista, apenas do usuário se não
       const configs: ScheduleConfig[] = [];
-      const doctorsToFetch = isAdmin ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
+      const doctorsToFetch = canViewAllSchedules ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
       
       for (const doctor of doctorsToFetch) {
         try {
@@ -167,8 +176,8 @@ export default function AgendaPage() {
 
       const allBlocks: ScheduleBlock[] = [];
       
-      // Buscar bloqueios: todos os profissionais se admin, apenas do usuário se não admin
-      const doctorsToFetch = isAdmin ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
+      // Buscar bloqueios: todos os profissionais se admin/recepcionista, apenas do usuário se não
+      const doctorsToFetch = canViewAllSchedules ? doctors : (userStaffId ? doctors.filter(d => d.id === userStaffId) : []);
       
       for (const doctor of doctorsToFetch) {
         try {
@@ -239,14 +248,14 @@ export default function AgendaPage() {
       fetchScheduleConfigs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctors, isAdmin, userStaffId]);
+  }, [doctors, canViewAllSchedules, userStaffId]);
 
   useEffect(() => {
     if (doctors.length > 0) {
       fetchScheduleBlocks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctors, selectedDate, view, isAdmin, userStaffId]);
+  }, [doctors, selectedDate, view, canViewAllSchedules, userStaffId]);
 
   useEffect(() => {
     setDayAvailability(calculatedDayAvailability);
@@ -285,6 +294,32 @@ export default function AgendaPage() {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const newStart = new Date(`${dateStr}T${formData.startTime}:00`);
     const newEnd = new Date(`${dateStr}T${formData.endTime}:00`);
+    
+    // Validar se o horário não é vencido (anterior ao horário atual)
+    const now = new Date();
+    if (newStart < now) {
+      toast.error('Não é possível agendar horários no passado');
+      return false;
+    }
+    
+    // Validar se o horário está dentro dos slots disponíveis configurados
+    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+    const dayAvail = periodAvailability.get(dateKey) || [];
+    const doctorSlots = dayAvail
+      .filter(avail => avail.staffId === formData.doctorId)
+      .flatMap(avail => avail.slots);
+    
+    const isWithinAvailableSlot = doctorSlots.some(slot => {
+      const slotStart = new Date(slot.start);
+      const slotEnd = new Date(slot.end);
+      // Verificar se o horário escolhido está dentro de algum slot disponível
+      return newStart >= slotStart && newEnd <= slotEnd;
+    });
+    
+    if (!isWithinAvailableSlot && doctorSlots.length > 0) {
+      toast.error('O horário escolhido não está dentro dos horários configurados para este profissional. Selecione um horário disponível.');
+      return false;
+    }
     
     const hasConflict = appointments.some(apt => {
       if (apt.doctorId !== formData.doctorId) return false;
@@ -454,6 +489,12 @@ export default function AgendaPage() {
   const handleProcessBilling = async () => {
     if (!selectedAppointmentForBilling) return;
 
+    // Verificar se o agendamento está cancelado
+    if (selectedAppointmentForBilling.status === 'CANCELED' || selectedAppointmentForBilling.status === 'canceled') {
+      toast.error('Não é possível faturar um agendamento cancelado.');
+      return;
+    }
+
     // Converter vírgula para ponto para cálculo
     const numericAmount = Number(billingData.amount.replace(',', '.'));
     if (!billingData.amount || isNaN(numericAmount) || numericAmount <= 0) {
@@ -573,15 +614,19 @@ export default function AgendaPage() {
                       </span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                         apt.status === 'CONFIRMED' || apt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                        apt.status === 'PENDING' || apt.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700' :
+                        apt.status === 'PENDING' || apt.status === 'scheduled' || apt.status === 'SCHEDULED' ? 'bg-yellow-100 text-yellow-700' :
                         apt.status === 'CANCELED' || apt.status === 'canceled' ? 'bg-red-100 text-red-700' :
                         apt.status === 'COMPLETED' || apt.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                        apt.status === 'IN_PROGRESS' || apt.status === 'in_progress' ? 'bg-purple-100 text-purple-700' :
+                        apt.status === 'NOSHOW' ? 'bg-gray-100 text-gray-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {apt.status === 'scheduled' ? 'AGENDADO' :
-                         apt.status === 'confirmed' ? 'CONFIRMADO' :
-                         apt.status === 'canceled' ? 'CANCELADO' :
-                         apt.status === 'completed' ? 'REALIZADO' :
+                        {apt.status === 'scheduled' || apt.status === 'SCHEDULED' || apt.status === 'PENDING' ? 'AGENDADO' :
+                         apt.status === 'confirmed' || apt.status === 'CONFIRMED' ? 'CONFIRMADO' :
+                         apt.status === 'canceled' || apt.status === 'CANCELED' ? 'CANCELADO' :
+                         apt.status === 'completed' || apt.status === 'COMPLETED' ? 'REALIZADO' :
+                         apt.status === 'in_progress' || apt.status === 'IN_PROGRESS' ? 'EM ATENDIMENTO' :
+                         apt.status === 'NOSHOW' ? 'NÃO COMPARECEU' :
                          apt.status}
                       </span>
                     </div>
@@ -598,7 +643,7 @@ export default function AgendaPage() {
                         <DollarSign className="h-5 w-5" />
                       </button>
                     )}
-                    {(apt.status === 'PENDING' || apt.status === 'scheduled') && (
+                    {(apt.status === 'PENDING' || apt.status === 'scheduled' || apt.status === 'SCHEDULED') && (
                       <button
                         onClick={() => updateStatus(apt.id, 'confirmed')}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -755,10 +800,10 @@ export default function AgendaPage() {
 
                       // Buscar bloqueios para este dia e hora
                       const dayBlocks = scheduleBlocks.filter(block => {
-                        // Se não for admin, mostrar apenas blocos do próprio profissional
-                        if (!isAdmin && userStaffId && block.staffId !== userStaffId) return false;
-                        // Se for admin e tiver filtro selecionado, aplicar filtro
-                        if (isAdmin && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
+                        // Se não for admin/recepcionista, mostrar apenas blocos do próprio profissional
+                        if (!canViewAllSchedules && userStaffId && block.staffId !== userStaffId) return false;
+                        // Se for admin/recepcionista e tiver filtro selecionado, aplicar filtro
+                        if (canViewAllSchedules && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
                         
                         // Parsear data do bloqueio sem timezone (YYYY-MM-DD)
                         const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
@@ -891,10 +936,10 @@ export default function AgendaPage() {
 
                 // Verificar se há bloqueio de dia inteiro
                 const hasFullDayBlock = scheduleBlocks.some(block => {
-                  // Se não for admin, mostrar apenas blocos do próprio profissional
-                  if (!isAdmin && userStaffId && block.staffId !== userStaffId) return false;
-                  // Se for admin e tiver filtro selecionado, aplicar filtro
-                  if (isAdmin && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
+                  // Se não for admin/recepcionista, mostrar apenas blocos do próprio profissional
+                  if (!canViewAllSchedules && userStaffId && block.staffId !== userStaffId) return false;
+                  // Se for admin/recepcionista e tiver filtro selecionado, aplicar filtro
+                  if (canViewAllSchedules && selectedStaffId && selectedStaffId !== '' && block.staffId !== selectedStaffId) return false;
                   if (block.blockType !== 'date') return false;
                   
                   const blockStartStr = typeof block.startDate === 'string' ? block.startDate.split('T')[0] : format(new Date(block.startDate), 'yyyy-MM-dd');
@@ -1031,8 +1076,8 @@ export default function AgendaPage() {
             </button>
           </div>
 
-          {/* Filtro por Profissional - Apenas para Admin */}
-          {isAdmin && (
+          {/* Filtro por Profissional - Para Admin e Recepcionista */}
+          {canViewAllSchedules && (
             <div className="flex items-center gap-3">
               <label className="text-sm font-medium text-gray-700">Filtrar por:</label>
               <select
@@ -1049,7 +1094,7 @@ export default function AgendaPage() {
               </select>
             </div>
           )}
-          {!isAdmin && userStaffId && (
+          {!canViewAllSchedules && userStaffId && (
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700">
                 Sua agenda

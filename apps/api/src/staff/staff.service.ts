@@ -113,9 +113,27 @@ export class StaffService {
     return staff;
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, role?: string) {
+    const where: any = { tenantId };
+    
+    // Filtrar por role se fornecido
+    if (role) {
+      // Se o role for 'DOCTOR', buscar staffs com role DOCTOR ou outros profissionais de saúde
+      if (role.toUpperCase() === 'DOCTOR') {
+        where.role = {
+          in: ['DOCTOR', 'PHYSIOTHERAPIST', 'NUTRITIONIST', 'PSYCHOLOGIST', 'DENTIST', 'SPEECH_THERAPIST'],
+        };
+      } else {
+        // Para outros roles, buscar exatamente o role informado (case-insensitive)
+        where.role = {
+          equals: role.toUpperCase(),
+          mode: 'insensitive',
+        };
+      }
+    }
+    
     return this.prisma.client.staff.findMany({
-      where: { tenantId },
+      where,
       include: { 
         user: true,
         staffProcedures: {

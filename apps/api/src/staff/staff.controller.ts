@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Req,
+  Query,
 } from '@nestjs/common';
 import { StaffService } from './staff.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -24,8 +25,8 @@ export class StaffController {
   }
 
   @Get()
-  findAll(@Req() req: any) {
-    return this.staffService.findAll(req.tenantId);
+  findAll(@Req() req: any, @Query('role') role?: string) {
+    return this.staffService.findAll(req.tenantId, role);
   }
 
   @Get(':id')

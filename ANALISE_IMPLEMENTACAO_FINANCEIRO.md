@@ -54,7 +54,7 @@ Este documento analisa as implementações necessárias para expandir o módulo 
 - Criar model `MedicalFeePayment` para registrar fechamentos de repasse
 - Adicionar campos opcionais de período em `MedicalFee` (ou criar agrupamento)
 
-### 2. Movimento de Caixa Diário (por Recepcionista e Geral)
+### 2. Movimento de Caixa Diário (por Recepcionista e Administrador)
 
 **Conceito:**
 - **Fluxo de Caixa**: Registro de todas as transações (entradas/saídas)
@@ -62,16 +62,18 @@ Este documento analisa as implementações necessárias para expandir o módulo 
 
 **Requisitos:**
 - Cada recepcionista deve poder fechar seu próprio caixa diário
-- Deve existir um "Caixa Geral" que agrega todos os recepcionistas
+- **Caixa Geral**: É o caixa diário do administrador (não mistura os caixas da recepção)
+- Todos os caixas devem ter **saldo inicial** e **saldo final** no fechamento
 - Caixas não fechados ficam em aberto até serem fechados
 - Um recepcionista não pode fechar o caixa de outro
-- Admin/Owner pode fechar qualquer caixa ou o caixa geral
+- Admin/Owner pode fechar qualquer caixa ou o caixa geral (administrativo)
 
 **Impacto no Schema:**
-- Modificar `DailyClosure` para incluir `createdById` (recepcionista)
-- Adicionar campo `closureType`: `'RECEPTIONIST' | 'GENERAL'`
+- Modificar `DailyClosure` para incluir `createdById` (recepcionista ou admin)
+- Adicionar campo `closureType`: `'RECEPTIONIST' | 'ADMIN'`
 - Remover constraint `@@unique([tenantId, date])` e criar `@@unique([tenantId, date, createdById, closureType])`
 - Adicionar campos de conferência: `cashCount`, `cardCount`, `pixCount`, etc.
+- **Adicionar campos obrigatórios**: `initialBalance` (saldo inicial) e `finalBalance` (saldo final)
 
 ### 3. Sistema de Relatórios
 
@@ -83,10 +85,12 @@ Este documento analisa as implementações necessárias para expandir o módulo 
 
 #### 3.1. Fechamento de Caixa Diário
 - Data do fechamento
-- Recepcionista responsável (se aplicável)
+- Recepcionista/Admin responsável
+- **Saldo inicial** do dia
 - Resumo de entradas/saídas por método de pagamento
 - Lista de transações do dia
-- Saldo final
+- **Saldo final** do dia
+- Diferença (se houver)
 - Assinatura do responsável
 
 #### 3.2. Faturamento por Período
@@ -199,8 +203,12 @@ model MedicalFeePayment {
 
 model DailyClosure {
   // ... campos existentes ...
-  createdById      String   @map("created_by_id") @db.Uuid // Recepcionista que fechou
-  closureType      String   @map("closure_type") // 'RECEPTIONIST' | 'GENERAL'
+  createdById      String   @map("created_by_id") @db.Uuid // Recepcionista ou Admin que fechou
+  closureType      String   @map("closure_type") // 'RECEPTIONIST' | 'ADMIN'
+  
+  // Saldos obrigatórios
+  initialBalance   Decimal  @map("initial_balance") @db.Decimal(10, 2) // Saldo inicial do dia
+  finalBalance     Decimal  @map("final_balance") @db.Decimal(10, 2) // Saldo final do dia
   
   // Campos de conferência física
   cashCount        Decimal? @map("cash_count") @db.Decimal(10, 2)
@@ -240,9 +248,9 @@ model Transaction {
 - **Novos métodos necessários:**
   - `closeMedicalFeePayment()`: Agrupa e fecha repasses por período
   - `getMedicalFeePayments()`: Lista fechamentos de repasse
-  - `closeReceptionistBox()`: Fecha caixa de um recepcionista específico
-  - `closeGeneralBox()`: Fecha caixa geral (agrega todos os recepcionistas)
-  - `getBoxStatus()`: Verifica status de fechamento (por recepcionista e geral)
+  - `closeReceptionistBox()`: Fecha caixa de um recepcionista específico (com saldo inicial e final)
+  - `closeAdminBox()`: Fecha caixa administrativo (com saldo inicial e final)
+  - `getBoxStatus()`: Verifica status de fechamento (por recepcionista e admin)
   - `generateReport()`: Gera relatórios em PDF
 
 - **Modificações necessárias:**
@@ -254,14 +262,14 @@ model Transaction {
 - **Novos endpoints:**
   - `POST /finance/medical-fees/close`: Fechar repasse por período
   - `GET /finance/medical-fees/payments`: Listar fechamentos de repasse
-  - `POST /finance/boxes/receptionist/close`: Fechar caixa de recepcionista
-  - `POST /finance/boxes/general/close`: Fechar caixa geral
-  - `GET /finance/boxes/status`: Status de fechamento
+  - `POST /finance/boxes/receptionist/close`: Fechar caixa de recepcionista (com saldo inicial e final)
+  - `POST /finance/boxes/admin/close`: Fechar caixa administrativo (com saldo inicial e final)
+  - `GET /finance/boxes/status`: Status de fechamento (por recepcionista e admin)
   - `GET /finance/reports/:type`: Gerar relatórios
 
 #### 3. **Autorização e Permissões**
-- **RECEPTIONIST**: Pode fechar apenas seu próprio caixa
-- **ADMIN/OWNER**: Pode fechar qualquer caixa e o caixa geral
+- **RECEPTIONIST**: Pode fechar apenas seu próprio caixa (com saldo inicial e final)
+- **ADMIN/OWNER**: Pode fechar qualquer caixa de recepcionista e o caixa administrativo (com saldo inicial e final)
 - **DOCTOR**: Pode visualizar seus próprios repasses e relatórios
 
 ### Impactos no Frontend
@@ -336,12 +344,13 @@ model Transaction {
 3. Criar seed de categorias de despesas
 4. Atualizar Prisma Client
 
-### Fase 2: Backend - Fechamento de Caixa por Recepcionista
-1. Modificar `FinanceService.closeDailyBox()`
-2. Criar `closeReceptionistBox()` e `closeGeneralBox()`
-3. Atualizar validação em `createTransaction()`
-4. Criar endpoints no controller
-5. Testes unitários
+### Fase 2: Backend - Fechamento de Caixa por Recepcionista e Admin
+1. Modificar `FinanceService.closeDailyBox()` para suportar saldo inicial e final
+2. Criar `closeReceptionistBox()` (com saldo inicial e final)
+3. Criar `closeAdminBox()` (caixa administrativo, com saldo inicial e final)
+4. Atualizar validação em `createTransaction()` para verificar fechamento por recepcionista/admin
+5. Criar endpoints no controller
+6. Testes unitários
 
 ### Fase 3: Backend - Fechamento de Repasse por Período
 1. Criar `MedicalFeePaymentService`
@@ -430,7 +439,8 @@ model Transaction {
 - [ ] Backend implementado e testado
 - [ ] Frontend implementado e testado
 - [ ] Relatórios gerando PDF corretamente
-- [ ] Fechamento de caixa por recepcionista funcionando
+- [ ] Fechamento de caixa por recepcionista funcionando (com saldo inicial e final)
+- [ ] Fechamento de caixa administrativo funcionando (com saldo inicial e final)
 - [ ] Fechamento de repasse por período funcionando
 - [ ] Categorização de despesas funcionando
 - [ ] Testes de integração passando
@@ -450,6 +460,6 @@ model Transaction {
 
 ---
 
-**Data de Criação:** 2026-01-06  
-**Última Atualização:** 2026-01-06  
+**Data de Criação:** 2026-01-07  
+**Última Atualização:** 2026-01-07  
 **Autor:** Sistema de Análise Automatizada

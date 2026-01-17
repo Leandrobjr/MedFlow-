@@ -15,6 +15,8 @@ import { FinanceModule } from './finance/finance.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { ExpenseCategoriesModule } from './expense-categories/expense-categories.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { SuppliersModule } from './suppliers/suppliers.module';
     ScheduleModule,
     ProceduresModule,
     SuppliersModule,
+    ExpenseCategoriesModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [
