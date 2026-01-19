@@ -27,6 +27,10 @@ export default function PEPPage() {
 
   // Form state for new/edit record
   const [formData, setFormData] = useState({
+    soapSubjective: '',
+    soapObjective: '',
+    soapAssessment: '',
+    soapPlan: '',
     anamnesis: '',
     physicalExam: '',
     diagnosis: '',
@@ -150,6 +154,10 @@ export default function PEPPage() {
     setSelectedRecord(record);
     // Sempre carregar os dados do prontuário (campos da consulta)
     setFormData({
+      soapSubjective: record.soapSubjective || '',
+      soapObjective: record.soapObjective || '',
+      soapAssessment: record.soapAssessment || '',
+      soapPlan: record.soapPlan || '',
       anamnesis: record.anamnesis || '',
       physicalExam: record.physicalExam || '',
       diagnosis: record.diagnosis || '',
@@ -158,7 +166,8 @@ export default function PEPPage() {
     });
     
     // Verificar se é um prontuário novo (sem dados) ou existente (com dados)
-    const isNewRecord = !record.anamnesis && !record.physicalExam && !record.diagnosis && !record.prescription && !record.conduct;
+    const isNewRecord = !record.anamnesis && !record.physicalExam && !record.diagnosis && !record.prescription && !record.conduct &&
+                        !record.soapSubjective && !record.soapObjective && !record.soapAssessment && !record.soapPlan;
     setHasUnsavedChanges(isNewRecord); // Prontuário novo precisa ser salvo; existente não
     
     // Garantir que os dados do paciente estão atualizados (alergias e medicamentos)
@@ -220,6 +229,10 @@ export default function PEPPage() {
       
       // Atualizar formData com os dados salvos (garantir que está sincronizado)
       setFormData({
+        soapSubjective: updatedRecord.soapSubjective || '',
+        soapObjective: updatedRecord.soapObjective || '',
+        soapAssessment: updatedRecord.soapAssessment || '',
+        soapPlan: updatedRecord.soapPlan || '',
         anamnesis: updatedRecord.anamnesis || '',
         physicalExam: updatedRecord.physicalExam || '',
         diagnosis: updatedRecord.diagnosis || '',
@@ -263,8 +276,8 @@ export default function PEPPage() {
     }
     
     // Validar campos obrigatórios antes de finalizar
-    if (!formData.diagnosis || !formData.diagnosis.trim()) {
-      toast.error('É necessário preencher o diagnóstico antes de finalizar o prontuário.');
+    if ((!formData.diagnosis || !formData.diagnosis.trim()) && (!formData.soapAssessment || !formData.soapAssessment.trim())) {
+      toast.error('É necessário preencher o diagnóstico ou avaliação antes de finalizar o prontuário.');
       return;
     }
     
@@ -538,76 +551,126 @@ export default function PEPPage() {
           </div>
 
           <div className="p-8 space-y-8">
-            <section className="space-y-4">
-              <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-100 pb-2">Anamnese</h3>
-              <textarea
-                disabled={isLocked}
-                value={formData.anamnesis}
-                onChange={(e) => {
-                  setFormData({...formData, anamnesis: e.target.value});
-                  setHasUnsavedChanges(true);
-                }}
-                placeholder="História da doença atual, sintomas, histórico familiar..."
-                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
-              />
-            </section>
-
-            <section className="space-y-4">
-              <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-100 pb-2">Exame Físico</h3>
-              <textarea
-                disabled={isLocked}
-                value={formData.physicalExam}
-                onChange={(e) => {
-                  setFormData({...formData, physicalExam: e.target.value});
-                  setHasUnsavedChanges(true);
-                }}
-                placeholder="Sinais vitais, observações do exame físico..."
-                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
-              />
-            </section>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <section className="space-y-4">
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-100 pb-2">Hipótese Diagnóstica / CID</h3>
-                <textarea
-                  disabled={isLocked}
-                  value={formData.diagnosis}
-                  onChange={(e) => {
-                    setFormData({...formData, diagnosis: e.target.value});
-                    setHasUnsavedChanges(true);
-                  }}
-                  className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
-                />
-              </section>
-
-              <section className="space-y-4">
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-100 pb-2">Prescrição</h3>
-                <textarea
-                  disabled={isLocked}
-                  value={formData.prescription}
-                  onChange={(e) => {
-                    setFormData({...formData, prescription: e.target.value});
-                    setHasUnsavedChanges(true);
-                  }}
-                  placeholder="Medicamentos, dosagens, orientações..."
-                  className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
-                />
-              </section>
+            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-6">
+              <p className="text-sm text-blue-800 flex items-center">
+                <FileText className="h-4 w-4 mr-2" />
+                Utilize a metodologia <strong>SOAP</strong> para preencher o prontuário.
+              </p>
             </div>
 
             <section className="space-y-4">
-              <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider border-b border-blue-100 pb-2">Conduta</h3>
+              <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">
+                  S - Subjetivo
+                </h3>
+                <span className="text-[10px] text-gray-400 font-normal italic">Queixas, sintomas, histórico relatado</span>
+              </div>
               <textarea
                 disabled={isLocked}
-                value={formData.conduct}
+                value={formData.soapSubjective}
                 onChange={(e) => {
-                  setFormData({...formData, conduct: e.target.value});
+                  setFormData({...formData, soapSubjective: e.target.value});
                   setHasUnsavedChanges(true);
                 }}
-                placeholder="Encaminhamentos, exames solicitados, retorno..."
-                className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
+                placeholder="Ex: Paciente relata dor de cabeça frontal há 3 dias, melhora com repouso..."
+                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
               />
             </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">
+                  O - Objetivo
+                </h3>
+                <span className="text-[10px] text-gray-400 font-normal italic">Exame físico, sinais vitais, observações</span>
+              </div>
+              <textarea
+                disabled={isLocked}
+                value={formData.soapObjective}
+                onChange={(e) => {
+                  setFormData({...formData, soapObjective: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="Ex: PA 120x80 mmHg, FC 80 bpm, afebril. Ausculta cardíaca normal..."
+                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
+              />
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">
+                  A - Avaliação
+                </h3>
+                <span className="text-[10px] text-gray-400 font-normal italic">Hipóteses diagnósticas, CID, raciocínio clínico</span>
+              </div>
+              <textarea
+                disabled={isLocked}
+                value={formData.soapAssessment}
+                onChange={(e) => {
+                  setFormData({...formData, soapAssessment: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="Ex: Enxaqueca tensional (G44.2). Raciocínio: Sintomas típicos sem sinais de alerta..."
+                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
+              />
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">
+                  P - Plano
+                </h3>
+                <span className="text-[10px] text-gray-400 font-normal italic">Conduta, prescrição, exames, encaminhamentos</span>
+              </div>
+              <textarea
+                disabled={isLocked}
+                value={formData.soapPlan}
+                onChange={(e) => {
+                  setFormData({...formData, soapPlan: e.target.value});
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="Ex: Prescrito Paracetamol 500mg se dor. Orientado repouso e hidratação..."
+                className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 text-sm"
+              />
+            </section>
+
+            {(formData.anamnesis || formData.physicalExam || formData.diagnosis || formData.prescription || formData.conduct) && (
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">Dados de Migração (Sistema Antigo)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {formData.anamnesis && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Anamnese</p>
+                      <p className="text-xs text-gray-600">{formData.anamnesis}</p>
+                    </div>
+                  )}
+                  {formData.physicalExam && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Exame Físico</p>
+                      <p className="text-xs text-gray-600">{formData.physicalExam}</p>
+                    </div>
+                  )}
+                  {formData.diagnosis && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Diagnóstico</p>
+                      <p className="text-xs text-gray-600">{formData.diagnosis}</p>
+                    </div>
+                  )}
+                  {formData.prescription && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Prescrição</p>
+                      <p className="text-xs text-gray-600">{formData.prescription}</p>
+                    </div>
+                  )}
+                  {formData.conduct && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Conduta</p>
+                      <p className="text-xs text-gray-600">{formData.conduct}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Seção de Informações do Paciente - SEMPRE editável (dados do paciente, não do prontuário) */}
             <section className="space-y-4 pt-6 border-t border-gray-200">

@@ -11,6 +11,10 @@ export interface MedicalRecord {
   appointmentId?: string;
   patientId: string;
   staffId: string;
+  soapSubjective?: string;
+  soapObjective?: string;
+  soapAssessment?: string;
+  soapPlan?: string;
   anamnesis?: string;
   physicalExam?: string;
   diagnosis?: string;
@@ -48,6 +52,10 @@ export const pepService = {
     appointmentId: string;
     patientId: string;
     staffId: string;
+    soapSubjective?: string;
+    soapObjective?: string;
+    soapAssessment?: string;
+    soapPlan?: string;
     anamnesis?: string;
     physicalExam?: string;
     diagnosis?: string;
@@ -63,6 +71,10 @@ export const pepService = {
   },
 
   update: async (id: string, data: {
+    soapSubjective?: string;
+    soapObjective?: string;
+    soapAssessment?: string;
+    soapPlan?: string;
     anamnesis?: string;
     physicalExam?: string;
     diagnosis?: string;

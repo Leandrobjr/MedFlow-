@@ -15,6 +15,22 @@ export class CreateMedicalRecordDto {
 
   @IsString()
   @IsOptional()
+  soapSubjective?: string;
+
+  @IsString()
+  @IsOptional()
+  soapObjective?: string;
+
+  @IsString()
+  @IsOptional()
+  soapAssessment?: string;
+
+  @IsString()
+  @IsOptional()
+  soapPlan?: string;
+
+  @IsString()
+  @IsOptional()
   anamnesis?: string;
 
   @IsString()
@@ -35,6 +51,22 @@ export class CreateMedicalRecordDto {
 }
 
 export class UpdateMedicalRecordDto {
+  @IsString()
+  @IsOptional()
+  soapSubjective?: string;
+
+  @IsString()
+  @IsOptional()
+  soapObjective?: string;
+
+  @IsString()
+  @IsOptional()
+  soapAssessment?: string;
+
+  @IsString()
+  @IsOptional()
+  soapPlan?: string;
+
   @IsString()
   @IsOptional()
   anamnesis?: string;

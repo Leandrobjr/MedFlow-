@@ -37,12 +37,12 @@ export class AuthService {
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'super-secret-key-change-me',
+      secret: process.env.JWT_SECRET || 'medflow_segredo_super_seguro_123',
       expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key-change-me',
+      secret: process.env.JWT_REFRESH_SECRET || 'medflow_refresh_segredo_extra_456',
       expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN as any) || '7d',
     });
 
@@ -61,7 +61,7 @@ export class AuthService {
   async refreshToken(token: string) {
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key-change-me',
+        secret: process.env.JWT_REFRESH_SECRET || 'medflow_refresh_segredo_extra_456',
       });
 
       const newAccessToken = await this.jwtService.signAsync(
@@ -74,7 +74,7 @@ export class AuthService {
           staffId: payload.staffId,
         },
         {
-          secret: process.env.JWT_SECRET || 'super-secret-key-change-me',
+          secret: process.env.JWT_SECRET || 'medflow_segredo_super_seguro_123',
           expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
         },
       );

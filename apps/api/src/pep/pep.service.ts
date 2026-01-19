@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto, CreateAddendumDto } from './dto/pep.dto';
 import { FinanceService } from '../finance/finance.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class PepService {
@@ -9,9 +10,10 @@ export class PepService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => FinanceService))
     private readonly financeService: FinanceService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async create(tenantId: string, dto: CreateMedicalRecordDto) {
+  async create(tenantId: string, dto: CreateMedicalRecordDto, auditContext?: { userId: string; ip?: string; ua?: string }) {
     // Verificar se já existe um prontuário para este agendamento
     const existing = await this.prisma.client.medicalRecord.findUnique({
       where: { appointmentId: dto.appointmentId },
@@ -21,27 +23,51 @@ export class PepService {
       throw new BadRequestException('Já existe um prontuário para este atendimento.');
     }
 
-    return this.prisma.client.medicalRecord.create({
+    const record = await this.prisma.client.medicalRecord.create({
       data: {
         ...dto,
         tenantId,
       },
     });
+
+    if (auditContext) {
+      /*
+      await this.auditService.log({
+        tenantId,
+        userId: auditContext.userId,
+        action: 'CREATE_MEDICAL_RECORD',
+        entity: 'MedicalRecord',
+        entityId: record.id,
+        ipAddress: auditContext.ip,
+        userAgent: auditContext.ua,
+        metadata: { appointmentId: dto.appointmentId, patientId: dto.patientId },
+      });
+      */
+    }
+
+    return record;
   }
 
   async findByPatient(tenantId: string, patientId: string) {
     return this.prisma.client.medicalRecord.findMany({
       where: { patientId, tenantId },
       include: {
-        staff: { select: { name: true, specialty: true } },
+        staff: {
+          select: {
+            name: true,
+            specialty: true,
+            crm: true,
+            crmState: true,
+          },
+        },
         addendums: true,
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(tenantId: string, id: string) {
-    return this.prisma.client.medicalRecord.findFirst({
+  async findOne(tenantId: string, id: string, auditContext?: { userId: string; ip?: string; ua?: string }) {
+    const record = await this.prisma.client.medicalRecord.findFirst({
       where: { id, tenantId },
       include: {
         patient: true,
@@ -50,9 +76,26 @@ export class PepService {
         appointment: true,
       },
     });
+
+    if (record && auditContext) {
+      /*
+      await this.auditService.log({
+        tenantId,
+        userId: auditContext.userId,
+        action: 'READ_MEDICAL_RECORD',
+        entity: 'MedicalRecord',
+        entityId: id,
+        ipAddress: auditContext.ip,
+        userAgent: auditContext.ua,
+        metadata: { patientId: record.patientId },
+      });
+      */
+    }
+
+    return record;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateMedicalRecordDto) {
+  async update(tenantId: string, id: string, dto: UpdateMedicalRecordDto, auditContext?: { userId: string; ip?: string; ua?: string }) {
     console.log('[PepService.update] Iniciando atualização:', { tenantId, id, dto });
     
     const record = await this.findOne(tenantId, id);
@@ -81,11 +124,33 @@ export class PepService {
       where: { id, tenantId },
       data: dto,
       include: {
-        staff: { select: { name: true, specialty: true } },
+        staff: {
+          select: {
+            name: true,
+            specialty: true,
+            crm: true,
+            crmState: true,
+          },
+        },
         appointment: true,
         addendums: true,
       },
     });
+
+    if (auditContext) {
+      /*
+      await this.auditService.log({
+        tenantId,
+        userId: auditContext.userId,
+        action: 'UPDATE_MEDICAL_RECORD',
+        entity: 'MedicalRecord',
+        entityId: id,
+        ipAddress: auditContext.ip,
+        userAgent: auditContext.ua,
+        metadata: { changes: dto },
+      });
+      */
+    }
     
     console.log('[PepService.update] Prontuário atualizado com sucesso:', {
       id: updated.id,
@@ -111,7 +176,7 @@ export class PepService {
     return updated;
   }
 
-  async finalize(tenantId: string, id: string) {
+  async finalize(tenantId: string, id: string, auditContext?: { userId: string; ip?: string; ua?: string }) {
     const record = await this.findOne(tenantId, id);
 
     if (!record) {
@@ -120,7 +185,7 @@ export class PepService {
 
     // Se já estiver finalizado, ainda assim verificar se precisa criar repasse
     if (record.isFinalized) {
-      // Verificar se precisa criar repasse retroativamente (caso tenha sido finalizado antes da implementação)
+      // ... existing code ...
       if (record.appointmentId) {
         try {
           console.log(`[PepService.finalize] Prontuário já finalizado. Verificando se precisa criar repasse retroativamente para appointment: ${record.appointmentId}`);
@@ -140,6 +205,21 @@ export class PepService {
         finalizedAt: new Date(),
       },
     });
+
+    if (auditContext) {
+      /*
+      await this.auditService.log({
+        tenantId,
+        userId: auditContext.userId,
+        action: 'FINALIZE_MEDICAL_RECORD',
+        entity: 'MedicalRecord',
+        entityId: id,
+        ipAddress: auditContext.ip,
+        userAgent: auditContext.ua,
+        metadata: { appointmentId: record.appointmentId },
+      });
+      */
+    }
 
     // Atualizar status do appointment para completed
     if (record.appointmentId) {
@@ -169,21 +249,36 @@ export class PepService {
     return updatedRecord;
   }
 
-  async addAddendum(tenantId: string, recordId: string, dto: CreateAddendumDto) {
+  async addAddendum(tenantId: string, recordId: string, dto: CreateAddendumDto, auditContext?: { userId: string; ip?: string; ua?: string }) {
     const record = await this.findOne(tenantId, recordId);
 
     if (!record) {
       throw new BadRequestException('Prontuário não encontrado.');
     }
 
-    // Adendos só fazem sentido em prontuários finalizados, 
-    // mas o PRD permite a qualquer momento para retificações oficiais.
-    return this.prisma.client.medicalAddendum.create({
+    const addendum = await this.prisma.client.medicalAddendum.create({
       data: {
         medicalRecordId: recordId,
         content: dto.content,
       },
     });
+
+    if (auditContext) {
+      /*
+      await this.auditService.log({
+        tenantId,
+        userId: auditContext.userId,
+        action: 'ADD_ADDENDUM_TO_MEDICAL_RECORD',
+        entity: 'MedicalRecord',
+        entityId: recordId,
+        ipAddress: auditContext.ip,
+        userAgent: auditContext.ua,
+        metadata: { addendumId: addendum.id },
+      });
+      */
+    }
+
+    return addendum;
   }
 }
 

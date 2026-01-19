@@ -19,7 +19,11 @@ export class PepController {
   @Post()
   @Roles(UserRole.DOCTOR, UserRole.ADMIN, UserRole.OWNER)
   create(@Req() req: any, @Body() dto: CreateMedicalRecordDto) {
-    return this.pepService.create(req.tenantId, dto);
+    return this.pepService.create(req.tenantId, dto, {
+      userId: req.user.sub,
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
   }
 
   @Get('patient/:patientId')
@@ -31,7 +35,11 @@ export class PepController {
   @Get(':id')
   @Roles(UserRole.DOCTOR, UserRole.ADMIN, UserRole.OWNER)
   findOne(@Req() req: any, @Param('id') id: string) {
-    return this.pepService.findOne(req.tenantId, id);
+    return this.pepService.findOne(req.tenantId, id, {
+      userId: req.user.sub,
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
   }
 
   @Patch(':id')
@@ -41,13 +49,21 @@ export class PepController {
     @Param('id') id: string,
     @Body() dto: UpdateMedicalRecordDto,
   ) {
-    return this.pepService.update(req.tenantId, id, dto);
+    return this.pepService.update(req.tenantId, id, dto, {
+      userId: req.user.sub,
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
   }
 
   @Post(':id/finalize')
   @Roles(UserRole.DOCTOR)
   finalize(@Req() req: any, @Param('id') id: string) {
-    return this.pepService.finalize(req.tenantId, id);
+    return this.pepService.finalize(req.tenantId, id, {
+      userId: req.user.sub,
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
   }
 
   @Post(':id/addendum')
@@ -57,7 +73,11 @@ export class PepController {
     @Param('id') id: string,
     @Body() dto: CreateAddendumDto,
   ) {
-    return this.pepService.addAddendum(req.tenantId, id, dto);
+    return this.pepService.addAddendum(req.tenantId, id, dto, {
+      userId: req.user.sub,
+      ip: req.ip,
+      ua: req.headers['user-agent'],
+    });
   }
 }
 

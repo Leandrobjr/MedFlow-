@@ -32,6 +32,7 @@ model Tenant {
   procedures         Procedure[]
   suppliers          Supplier[]
   expenseCategories  ExpenseCategory[]
+  auditLogs          AuditLog[]
 
   @@map("tenants")
 }
@@ -154,14 +155,27 @@ model MedicalRecord {
   staffId       String @map("staff_id") @db.Uuid
   tenantId      String @map("tenant_id") @db.Uuid
 
+  // Metodologia SOAP
+  soapSubjective String? @map("soap_subjective") @db.Text // S: Queixas, sintomas, histórico
+  soapObjective  String? @map("soap_objective") @db.Text  // O: Exame físico, sinais vitais
+  soapAssessment String? @map("soap_assessment") @db.Text // A: Diagnóstico, raciocínio clínico
+  soapPlan       String? @map("soap_plan") @db.Text       // P: Conduta, prescrição, exames
+
+  // Dados legados (mantidos para compatibilidade durante migração se necessário)
   anamnesis    String? @db.Text
   physicalExam String? @map("physical_exam") @db.Text
   diagnosis    String? @db.Text
   prescription String? @db.Text
   conduct      String? @db.Text
 
-  isFinalized Boolean   @default(false) @map("is_finalized")
-  finalizedAt DateTime? @map("finalized_at")
+  // Assinatura Digital e Validade Jurídica
+  isFinalized    Boolean   @default(false) @map("is_finalized")
+  finalizedAt    DateTime? @map("finalized_at")
+  signatureHash  String?   @map("signature_hash") @db.Text // Hash do documento assinado
+  signatureDate  DateTime? @map("signature_date")          // Data do carimbo de tempo
+  certificateId  String?   @map("certificate_id")          // ID do certificado usado
+  signerIp       String?   @map("signer_ip")               // IP de quem assinou
+  memedPrescrId  String?   @map("memed_prescr_id")         // ID da prescrição na Memed
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -421,4 +435,23 @@ model MedicalFeePayment {
   fees       MedicalFee[]
 
   @@map("medical_fee_payments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  entity    String?
+  entityId  String?  @map("entity_id")
+  metadata  Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([userId])
+  @@map("audit_logs")
 }
