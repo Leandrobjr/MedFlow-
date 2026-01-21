@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { reportsService } from '@/services/reports-service';
 import { financeService, MedicalFeePayment } from '@/services/finance-service';
 import { staffService, Staff } from '@/services/data-service';
@@ -46,11 +47,21 @@ interface DailyClosure {
   totalIncome: number;
   totalExpense: number;
   netBalance: number;
-  closedBy: { id: string; name: string };
+  difference?: number | null;
+  cashCount?: number | null;
+  cardCount?: number | null;
+  pixCount?: number | null;
+  observations?: string | null;
+  status?: string;
+  createdAt?: string;
+  closedBy: { id: string; name: string; email?: string };
 }
 
 export default function RelatoriosPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  // Helper para normalizar role para uppercase
+  const getUserRole = () => user?.role?.toUpperCase();
   const [activeReport, setActiveReport] = useState<ReportType>('billing');
   const [loading, setLoading] = useState(false);
   
@@ -77,7 +88,7 @@ export default function RelatoriosPage() {
 
   useEffect(() => {
     fetchFilterData();
-  }, [activeReport, startDate, endDate]);
+  }, [activeReport, startDate, endDate, selectedUserId]);
 
   const fetchFilterData = async () => {
     try {
@@ -129,23 +140,45 @@ export default function RelatoriosPage() {
       } else if (activeReport === 'daily-closure' || activeReport === 'closures') {
         // Buscar fechamentos de caixa
         try {
+          // Para RECEPTIONIST, não passar userId (o backend já força para o próprio usuário)
+          // Para ADMIN/OWNER, passar userId se selecionado
+          const userIdToQuery = (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') 
+            ? (selectedUserId || undefined)
+            : undefined; // RECEPTIONIST: backend já filtra automaticamente
+          
           const closuresData = await financeService.getDailyClosures({
             startDate,
             endDate,
+            userId: userIdToQuery,
           });
           setDailyClosures(closuresData || []);
           
-          // Extrair usuários únicos dos fechamentos
-          const uniqueUsers = new Map<string, { id: string; name: string }>();
-          closuresData?.forEach((c: DailyClosure) => {
-            if (c.closedBy && !uniqueUsers.has(c.closedBy.id)) {
-              uniqueUsers.set(c.closedBy.id, { id: c.closedBy.id, name: c.closedBy.name });
-            }
-          });
-          setUsers(Array.from(uniqueUsers.values()));
+          // Extrair usuários únicos dos fechamentos (apenas se for ADMIN/OWNER)
+          // Para RECEPTIONIST, não mostrar dropdown de usuários
+          if (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') {
+            // Buscar todos os fechamentos sem filtro de usuário para popular o dropdown
+            const allClosuresData = await financeService.getDailyClosures({
+              startDate,
+              endDate,
+              // Não passar userId para buscar todos
+            });
+            
+            const uniqueUsers = new Map<string, { id: string; name: string }>();
+            allClosuresData?.forEach((c: DailyClosure) => {
+              if (c.closedBy && !uniqueUsers.has(c.closedBy.id)) {
+                uniqueUsers.set(c.closedBy.id, { id: c.closedBy.id, name: c.closedBy.name });
+              }
+            });
+            setUsers(Array.from(uniqueUsers.values()));
+          } else {
+            setUsers([]);
+          }
         } catch (error: any) {
           console.error('Erro ao carregar fechamentos:', error);
           setDailyClosures([]);
+          if (error.response?.status !== 404) {
+            toast.error('Erro ao carregar fechamentos de caixa. Tente novamente.');
+          }
         }
       }
     } catch (error: any) {
@@ -301,31 +334,18 @@ export default function RelatoriosPage() {
             <Calculator className="h-4 w-4 inline mr-2" />
             Repasse Médico
           </button>
-          {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'RECEPTIONIST') && (
-            <>
-              <button
-                onClick={() => setActiveReport('closures')}
-                className={`px-4 py-2 rounded-xl font-semibold transition-all ${
-                  activeReport === 'closures'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <DollarSign className="h-4 w-4 inline mr-2" />
-                Fechamentos de Caixa
-              </button>
-              <button
-                onClick={() => setActiveReport('daily-closure')}
-                className={`px-4 py-2 rounded-xl font-semibold transition-all ${
-                  activeReport === 'daily-closure'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <FileText className="h-4 w-4 inline mr-2" />
-                Caixa Individual
-              </button>
-            </>
+          {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER' || getUserRole() === 'RECEPTIONIST') && (
+            <button
+              onClick={() => setActiveReport('closures')}
+              className={`px-4 py-2 rounded-xl font-semibold transition-all ${
+                activeReport === 'closures'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <DollarSign className="h-4 w-4 inline mr-2" />
+              Fechamentos de Caixa
+            </button>
           )}
         </div>
 
@@ -452,32 +472,175 @@ export default function RelatoriosPage() {
         )}
 
         {activeReport === 'closures' && (
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <User className="h-4 w-4 inline mr-1" />
-              Filtrar por Usuário
-            </label>
-            <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="">Todos os usuários</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-            {dailyClosures.length > 0 && (
-              <p className="mt-2 text-sm text-green-600">
-                {dailyClosures.length} fechamento(s) encontrado(s) no período.
-              </p>
+          <>
+            {/* Filtro de usuário (apenas para ADMIN/OWNER) */}
+            {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <User className="h-4 w-4 inline mr-1" />
+                  Filtrar por Usuário
+                </label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Todos os usuários</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
-            {dailyClosures.length === 0 && (
-              <p className="mt-2 text-sm text-yellow-600">
-                Nenhum fechamento encontrado no período selecionado.
-              </p>
+            
+            {/* Tabela de fechamentos encontrados */}
+            {dailyClosures.length > 0 ? (
+              <div className="mb-6 bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                  <h3 className="font-semibold text-gray-900">
+                    {dailyClosures.length} fechamento(s) encontrado(s)
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo Inicial</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Entradas</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saídas</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo Final</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo em Dinheiro</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {dailyClosures.map((closure) => {
+                        // Extrair data diretamente da string ISO sem ajuste de timezone
+                        // O banco salva a data do fechamento como "2026-01-14T00:00:00.000Z"
+                        // Precisamos extrair apenas "2026-01-14" e formatar para "14/01/2026"
+                        const rawDate = closure.date;
+                        let displayDate = '';
+                        if (typeof rawDate === 'string') {
+                          const datePart = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+                          const [year, month, day] = datePart.split('-');
+                          displayDate = `${day}/${month}/${year}`;
+                        } else {
+                          displayDate = formatDateBR(rawDate, 'dd/MM/yyyy');
+                        }
+                        
+                        return (
+                        <tr key={closure.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {displayDate}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              closure.closureType === 'ADMIN' 
+                                ? 'bg-purple-100 text-purple-800' 
+                                : 'bg-orange-100 text-orange-800'
+                            }`}>
+                              {closure.closureType === 'ADMIN' ? 'Administrativo' : 'Recepção'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {closure.closedBy?.name || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(closure.initialBalance)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 font-semibold">
+                            +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(closure.totalIncome)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600 font-semibold">
+                            -{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(closure.totalExpense)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-bold">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(closure.finalBalance)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                            {closure.cashCount !== null && closure.cashCount !== undefined ? (
+                              <span className="font-semibold text-gray-900">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(closure.cashCount)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                            <button
+                              onClick={() => {
+                                // Extrair data do fechamento
+                                const rawDate = closure.date;
+                                let dateStr = '';
+                                if (typeof rawDate === 'string') {
+                                  dateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+                                }
+                                const userId = closure.closedBy?.id || '';
+                                const closureType = closure.closureType || 'ADMIN';
+                                
+                                // Salvar no sessionStorage para a página de financeiro ler
+                                const closureParams = { date: dateStr, userId, closureType };
+                                sessionStorage.setItem('openClosureParams', JSON.stringify(closureParams));
+                                console.log('[ABRIR] Salvando no sessionStorage:', closureParams);
+                                
+                                router.push('/dashboard/financeiro');
+                              }}
+                              className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Abrir
+                            </button>
+                          </td>
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50">
+                      <tr>
+                        <td colSpan={3} className="px-6 py-3 text-sm font-bold text-gray-900">
+                          ACUMULADO
+                        </td>
+                        <td className="px-6 py-3 text-sm text-right font-bold text-gray-900">
+                          {/* Saldo Inicial não deve ser somado */}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-right font-bold text-green-600">
+                          +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                            dailyClosures.reduce((sum, c) => sum + c.totalIncome, 0)
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-right font-bold text-red-600">
+                          -{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                            dailyClosures.reduce((sum, c) => sum + c.totalExpense, 0)
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-right font-bold text-gray-900">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                            dailyClosures.reduce((sum, c) => sum + c.finalBalance, 0)
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-right font-bold text-gray-900">
+                          {/* Somatório de Saldo em Dinheiro removido a pedido do usuário */}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-center">
+                          {/* Coluna de ações vazia no rodapé */}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 bg-yellow-50 rounded-xl border border-yellow-200 p-6">
+                <p className="text-sm text-yellow-800">
+                  Nenhum fechamento encontrado no período selecionado.
+                  {selectedUserId && ' Tente remover o filtro de usuário ou ajustar o período.'}
+                </p>
+              </div>
             )}
-          </div>
+          </>
         )}
 
         {activeReport === 'daily-closure' && (
@@ -553,7 +716,13 @@ export default function RelatoriosPage() {
           {activeReport === 'closures' && (
             <>
               <p><strong>Relatório de Fechamentos de Caixa:</strong> Consolidado de todos os fechamentos de caixa do período.</p>
-              <p>Inclui resumo geral, detalhamento por dia e totais por método de pagamento. Pode filtrar por usuário.</p>
+              <p>Inclui resumo geral, detalhamento por dia e totais por método de pagamento.</p>
+              {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (
+                <p className="text-blue-700 font-semibold">Você pode filtrar por usuário para ver fechamentos específicos.</p>
+              )}
+              {getUserRole() === 'RECEPTIONIST' && (
+                <p className="text-orange-700 font-semibold">Você está visualizando apenas seus próprios fechamentos de caixa.</p>
+              )}
             </>
           )}
           {activeReport === 'daily-closure' && (

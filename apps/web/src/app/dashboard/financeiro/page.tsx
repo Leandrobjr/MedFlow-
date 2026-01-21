@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { financeService, Transaction, MedicalFee } from '@/services/finance-service';
 import { staffService, Staff } from '@/services/data-service';
 import { patientService, Patient } from '@/services/data-service';
@@ -43,8 +44,45 @@ const PAYMENT_METHODS = ['Dinheiro', 'Cartão de Débito', 'Cartão de Crédito'
 
 export default function FinanceiroPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  
   // Helper para normalizar role para uppercase
   const getUserRole = () => user?.role?.toUpperCase();
+  
+  // Estado para armazenar parâmetros de abertura de fechamento (via sessionStorage)
+  const [closureParams, setClosureParams] = useState<{ date: string | null; userId: string | null; closureType: string | null }>({
+    date: null,
+    userId: null,
+    closureType: null,
+  });
+  const [paramsProcessed, setParamsProcessed] = useState(false);
+  
+  // Capturar parâmetros do sessionStorage (salvos pela página de relatórios)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !paramsProcessed) {
+      const stored = sessionStorage.getItem('openClosureParams');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          console.log('[CLOSURE-PARAMS] Lido do sessionStorage:', parsed);
+          setClosureParams({
+            date: parsed.date || null,
+            userId: parsed.userId || null,
+            closureType: parsed.closureType || null,
+          });
+          // Limpar após ler para não interferir em navegações futuras
+          sessionStorage.removeItem('openClosureParams');
+        } catch (e) {
+          console.error('[CLOSURE-PARAMS] Erro ao parsear:', e);
+        }
+      }
+      setParamsProcessed(true);
+    }
+  }, [paramsProcessed]);
+  
+  const urlDateParam = closureParams.date;
+  const urlUserIdParam = closureParams.userId;
+  const urlClosureTypeParam = closureParams.closureType as 'ADMIN' | 'RECEPTIONIST' | null;
   
   // DOCTOR só pode ver repasses, não fluxo de caixa
   const [activeTab, setActiveTab] = useState<'caixa' | 'repasses'>(
@@ -85,6 +123,7 @@ export default function FinanceiroPage() {
   const [receptionists, setReceptionists] = useState<Staff[]>([]);
   const [selectedReceptionistId, setSelectedReceptionistId] = useState<string>('');
   const [selectedBoxUserId, setSelectedBoxUserId] = useState<string>(''); // Usuário selecionado no dropdown de caixas
+  const [selectedClosureType, setSelectedClosureType] = useState<'ADMIN' | 'RECEPTIONIST' | null>(null); // Tipo de caixa selecionado
   const [isBoxDropdownOpen, setIsBoxDropdownOpen] = useState(false);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   
@@ -158,17 +197,62 @@ export default function FinanceiroPage() {
           ? (selectedBoxUserId || undefined) // Admin sem seleção = undefined = ver tudo
           : (selectedBoxUserId || user?.id || ''); // Recepcionista sempre filtra
         
-        const closureType = getUserRole() === 'RECEPTIONIST' ? 'RECEPTIONIST' : 'ADMIN';
+        // Definir tipo de fechamento:
+        // - RECEPTIONIST logado: sempre 'RECEPTIONIST'
+        // - ADMIN/OWNER: usar selectedClosureType se definido, senão inferir:
+        //   - Com usuário selecionado: 'RECEPTIONIST' (caixa de recepção)
+        //   - Sem usuário selecionado: 'ADMIN' (caixa administrativo)
+        const closureType =
+          getUserRole() === 'RECEPTIONIST'
+            ? 'RECEPTIONIST'
+            : (selectedClosureType || (selectedBoxUserId ? 'RECEPTIONIST' : 'ADMIN'));
         
-        const [data, status, boxStatusData] = await Promise.all([
+        // Usar Promise.allSettled para não falhar se uma requisição der erro
+        const results = await Promise.allSettled([
           financeService.getTransactions(selectedDate, userIdToQuery),
           financeService.getClosureStatus(selectedDate, userIdToQuery || user?.id || '', closureType),
           financeService.getBoxStatus(selectedDate, userIdToQuery),
         ]);
-        console.log('Transações carregadas:', data.length, 'para data:', selectedDate, 'usuário:', userIdToQuery);
-        setTransactions(data || []);
-        setClosureStatus(status);
-        setBoxStatus(boxStatusData);
+        
+        // Processar resultados
+        const [transactionsResult, closureStatusResult, boxStatusResult] = results;
+        
+        // Transações
+        if (transactionsResult.status === 'fulfilled') {
+          setTransactions(transactionsResult.value || []);
+          console.log('Transações carregadas:', transactionsResult.value?.length || 0, 'para data:', selectedDate, 'usuário:', userIdToQuery);
+        } else {
+          console.error('Erro ao carregar transações:', transactionsResult.reason);
+          setTransactions([]);
+          // Só mostrar erro se não for 404 (sem dados é normal)
+          if (transactionsResult.reason?.response?.status !== 404) {
+            toast.error('Erro ao carregar transações. Tente novamente.');
+          }
+        }
+        
+        // Status de fechamento
+        if (closureStatusResult.status === 'fulfilled') {
+          setClosureStatus(closureStatusResult.value);
+        } else {
+          console.error('Erro ao carregar status de fechamento:', closureStatusResult.reason);
+          setClosureStatus(null);
+          // Não mostrar erro para o usuário se for 404 (sem fechamento é normal)
+          if (closureStatusResult.reason?.response?.status !== 404 && closureStatusResult.reason?.response?.status !== 500) {
+            // Erros 500 são tratados globalmente, não mostrar aqui
+          }
+        }
+        
+        // Status do caixa
+        if (boxStatusResult.status === 'fulfilled') {
+          setBoxStatus(boxStatusResult.value);
+        } else {
+          console.error('Erro ao carregar status do caixa:', boxStatusResult.reason);
+          setBoxStatus(null);
+          // Não mostrar erro para o usuário se for 404 (sem dados é normal)
+          if (boxStatusResult.reason?.response?.status !== 404 && boxStatusResult.reason?.response?.status !== 500) {
+            // Erros 500 são tratados globalmente, não mostrar aqui
+          }
+        }
       } else {
         // Todos os usuários (incluindo RECEPTIONIST) podem ver repasses
         // Apenas a ação de fechar repasses é restrita a ADMIN/OWNER
@@ -223,7 +307,11 @@ export default function FinanceiroPage() {
         // (o sistema de autenticação deve redirecionar)
       } else if (error.response?.status >= 500) {
         // 500+ = Erro do servidor - ISSO É UM ERRO REAL que precisa ser corrigido
-        toast.error('Erro no servidor. Por favor, tente novamente mais tarde.');
+        // Mas não mostrar múltiplos toasts se várias requisições falharem
+        const errorCount = error.response?.data?.errorCount || 1;
+        if (errorCount === 1) {
+          toast.error('Erro no servidor. Verificando conexão...', { duration: 3000 });
+        }
         console.error('Erro do servidor:', errorMessage);
       } else if (error.response?.status !== 401) {
         // Outros erros - pode ser erro real ou apenas falta de dados
@@ -252,9 +340,109 @@ export default function FinanceiroPage() {
     }
   };
 
+  // Estado para controlar se a inicialização foi concluída
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Processar parâmetros da URL capturados no mount
   useEffect(() => {
+    // Aguardar user e processamento de params
+    if (!user || !paramsProcessed) return;
+    
+    // Verificar se há parâmetros na URL
+    const hasUrlParams = urlDateParam || urlUserIdParam || urlClosureTypeParam;
+    
+    console.log('[URL] ======= INÍCIO DO PROCESSAMENTO =======');
+    console.log('[URL] urlDateParam RECEBIDO:', urlDateParam, 'tipo:', typeof urlDateParam);
+    console.log('[URL] urlUserIdParam:', urlUserIdParam);
+    console.log('[URL] urlClosureTypeParam:', urlClosureTypeParam);
+    console.log('[URL] role:', getUserRole());
+    
+    if (hasUrlParams && !isInitialized) {
+      // Determinar os valores finais
+      let finalDate = urlDateParam || selectedDate;
+      let finalUserId = selectedBoxUserId;
+      let finalClosureType: 'ADMIN' | 'RECEPTIONIST' | null = selectedClosureType;
+      
+      const isAdminOrOwner = getUserRole() === 'ADMIN' || getUserRole() === 'OWNER';
+      
+      if (urlUserIdParam && isAdminOrOwner) {
+        finalUserId = urlUserIdParam;
+        finalClosureType = urlClosureTypeParam || 'RECEPTIONIST';
+      } else if (urlClosureTypeParam) {
+        finalClosureType = urlClosureTypeParam;
+        if (urlClosureTypeParam === 'ADMIN') {
+          finalUserId = '';
+        }
+      }
+      
+      console.log('[URL] ======= VALORES FINAIS =======');
+      console.log('[URL] finalDate CALCULADO:', finalDate);
+      console.log('[URL] finalUserId:', finalUserId);
+      console.log('[URL] finalClosureType:', finalClosureType);
+      console.log('[URL] selectedDate ANTERIOR:', selectedDate);
+      
+      // Atualizar estados
+      console.log('[URL] Setando selectedDate para:', finalDate);
+      setSelectedDate(finalDate);
+      setSelectedBoxUserId(finalUserId);
+      setSelectedClosureType(finalClosureType);
+      setIsInitialized(true);
+      
+      // Fazer fetch imediato com os valores corretos
+      (async () => {
+        setLoading(true);
+        try {
+          if (activeTab === 'caixa' && getUserRole() !== 'DOCTOR') {
+            const isAdmin = getUserRole() === 'ADMIN' || getUserRole() === 'OWNER';
+            const userIdToQuery = isAdmin ? (finalUserId || undefined) : (finalUserId || user?.id || '');
+            const closureType = getUserRole() === 'RECEPTIONIST'
+              ? 'RECEPTIONIST'
+              : (finalClosureType || (finalUserId ? 'RECEPTIONIST' : 'ADMIN'));
+            
+            console.log('[URL] Buscando dados:', { date: finalDate, userId: userIdToQuery, closureType });
+            
+            const results = await Promise.allSettled([
+              financeService.getTransactions(finalDate, userIdToQuery),
+              financeService.getClosureStatus(finalDate, userIdToQuery || user?.id || '', closureType),
+              financeService.getBoxStatus(finalDate, userIdToQuery),
+            ]);
+            
+            const [transactionsResult, closureStatusResult, boxStatusResult] = results;
+            
+            if (transactionsResult.status === 'fulfilled') {
+              setTransactions(transactionsResult.value || []);
+              console.log('[URL] Transações carregadas:', transactionsResult.value?.length || 0);
+            }
+            if (closureStatusResult.status === 'fulfilled') {
+              setClosureStatus(closureStatusResult.value);
+            }
+            if (boxStatusResult.status === 'fulfilled') {
+              setBoxStatus(boxStatusResult.value);
+            }
+          }
+        } catch (error) {
+          console.error('[URL] Erro ao carregar dados:', error);
+        } finally {
+          setLoading(false);
+        }
+      })();
+    } else if (!isInitialized) {
+      // Sem parâmetros na URL - inicializar normalmente
+      setIsInitialized(true);
+      fetchFinanceData();
+    }
+  }, [user, paramsProcessed, urlDateParam, urlUserIdParam, urlClosureTypeParam]); // Executar quando user e params estiverem prontos
+
+  // Buscar dados financeiros quando estados mudarem (após inicialização)
+  useEffect(() => {
+    // Só executar após a inicialização e quando não há parâmetros de URL
+    if (!user || !isInitialized) return;
+    const hasUrlParams = urlDateParam || urlUserIdParam || urlClosureTypeParam;
+    if (hasUrlParams) return; // Evitar fetch duplicado se veio de URL
+    
+    console.log('[FETCH] Buscando dados:', { selectedDate, selectedBoxUserId, selectedClosureType });
     fetchFinanceData();
-  }, [activeTab, selectedDate, selectedBoxUserId, repasseStartDate, repasseEndDate, selectedDoctorId]);
+  }, [activeTab, selectedDate, selectedBoxUserId, selectedClosureType, repasseStartDate, repasseEndDate, selectedDoctorId]);
 
   useEffect(() => {
     fetchInitialData();
@@ -275,21 +463,51 @@ export default function FinanceiroPage() {
     }
   }, [isBoxDropdownOpen]);
 
-  const totalIncome = transactions
-    .filter(t => t.type === 'INCOME' || t.type === 'income')
-    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+  // Verificar se há um fechamento salvo para mostrar os valores do snapshot
+  // closureStatus pode ser um objeto (fechamento específico) ou array (todos os fechamentos do dia)
+  const getRelevantClosure = () => {
+    if (!closureStatus) return null;
+    
+    // Se for array, encontrar o fechamento relevante baseado no tipo e usuário selecionado
+    if (Array.isArray(closureStatus)) {
+      const isAdminClosure = selectedClosureType === 'ADMIN' || (!selectedBoxUserId && (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER'));
+      if (isAdminClosure) {
+        return closureStatus.find((c: any) => c.closureType === 'ADMIN');
+      } else {
+        return closureStatus.find((c: any) => c.closureType === 'RECEPTIONIST' && (!selectedBoxUserId || c.createdById === selectedBoxUserId));
+      }
+    }
+    
+    // Se for objeto único, retornar diretamente
+    return closureStatus;
+  };
+  
+  const relevantClosure = getRelevantClosure();
+  const hasClosedBox = !!relevantClosure;
+  
+  // Se o caixa está fechado, usar valores salvos do fechamento (snapshot)
+  // Caso contrário, calcular em tempo real das transações
+  const totalIncome = hasClosedBox 
+    ? Number(relevantClosure.totalIncome || 0)
+    : transactions
+        .filter(t => t.type === 'INCOME' || t.type === 'income')
+        .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-  const totalExpense = transactions
-    .filter(t => t.type === 'EXPENSE' || t.type === 'expense')
-    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+  const totalExpense = hasClosedBox
+    ? Number(relevantClosure.totalExpense || 0)
+    : transactions
+        .filter(t => t.type === 'EXPENSE' || t.type === 'expense')
+        .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
   // Calcular saldos por método de pagamento
   const balancesByMethod = boxStatus?.balancesByMethod || {};
   
-  // Saldo inicial (do dia anterior)
-  const initialBalance = Number(boxStatus?.previousDayFinalBalance || 0);
+  // Saldo inicial: se fechado, usar do fechamento; senão do boxStatus
+  const initialBalance = hasClosedBox
+    ? Number(relevantClosure.initialBalance || 0)
+    : Number(boxStatus?.previousDayFinalBalance || 0);
   
-  // Entradas e saídas por método
+  // Entradas e saídas por método (tempo real - não há snapshot por método)
   const incomeCash = Number(balancesByMethod?.Dinheiro?.income || 0);
   const expenseCash = Number(balancesByMethod?.Dinheiro?.expense || 0);
   const incomePix = Number(balancesByMethod?.PIX?.income || 0);
@@ -299,14 +517,16 @@ export default function FinanceiroPage() {
   const incomeCredit = Number(balancesByMethod?.['Cartão de Crédito']?.income || 0);
   const expenseCredit = Number(balancesByMethod?.['Cartão de Crédito']?.expense || 0);
   
-  // Saldo do Dia = Saldo Inicial + Entradas - Saídas
-  const dayBalance = initialBalance + totalIncome - totalExpense;
+  // Saldo Final: se fechado, usar do fechamento; senão calcular
+  const dayBalance = hasClosedBox
+    ? Number(relevantClosure.finalBalance || 0)
+    : initialBalance + totalIncome - totalExpense;
   
-  // Saldo Final = Saldo Inicial + Entradas em Dinheiro - Saídas em Dinheiro - Transferências
-  // Calcular transferências (repasses médicos pagos em dinheiro no dia)
-  // TODO: Buscar transferências do dia quando houver endpoint para isso
-  const transfers = 0; // Por enquanto 0, será implementado quando houver endpoint de transferências
-  const finalBalance = initialBalance + incomeCash - expenseCash - transfers;
+  // Saldo em Dinheiro: se fechado, usar cashCount do fechamento; senão calcular
+  const transfers = 0;
+  const finalBalance = hasClosedBox
+    ? Number(relevantClosure.cashCount || 0)
+    : initialBalance + incomeCash - expenseCash - transfers;
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -351,7 +571,11 @@ export default function FinanceiroPage() {
     const userIdToCheck = isAdminOrOwnerCheck 
       ? (selectedBoxUserId || user?.id || '') 
       : (selectedBoxUserId || user?.id || '');
-    const closureType = getUserRole() === 'RECEPTIONIST' ? 'RECEPTIONIST' : 'ADMIN';
+    // Mesmo critério de closureType usado em fetchFinanceData
+    const closureType =
+      getUserRole() === 'RECEPTIONIST'
+        ? 'RECEPTIONIST'
+        : (selectedClosureType || (selectedBoxUserId ? 'RECEPTIONIST' : 'ADMIN'));
     if (boxStatus?.userClosure && boxStatus.userClosure.closureType === closureType) {
       toast.error('Este caixa já foi fechado. Não é possível adicionar novos lançamentos.');
       return;
@@ -676,6 +900,12 @@ export default function FinanceiroPage() {
                     <div
                       onClick={() => {
                         setSelectedBoxUserId(user?.id || '');
+                        // Se for ADMIN/OWNER selecionando próprio caixa, mostrar caixa ADMIN
+                        if (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') {
+                          setSelectedClosureType('ADMIN');
+                        } else {
+                          setSelectedClosureType('RECEPTIONIST');
+                        }
                         setActiveTab('caixa');
                         setIsBoxDropdownOpen(false);
                       }}
@@ -695,6 +925,8 @@ export default function FinanceiroPage() {
                               key={r.userId}
                               onClick={() => {
                                 setSelectedBoxUserId(r.userId || '');
+                                // Selecionar recepcionista = caixa de recepção
+                                setSelectedClosureType('RECEPTIONIST');
                                 setActiveTab('caixa');
                                 setIsBoxDropdownOpen(false);
                               }}
@@ -711,6 +943,8 @@ export default function FinanceiroPage() {
                         <div
                           onClick={() => {
                             setSelectedBoxUserId(user?.id || '');
+                            // Selecionar próprio caixa como admin = caixa ADMIN
+                            setSelectedClosureType('ADMIN');
                             setActiveTab('caixa');
                             setIsBoxDropdownOpen(false);
                           }}
@@ -792,7 +1026,7 @@ export default function FinanceiroPage() {
                 <div className="p-3 rounded-xl bg-blue-50">
                   <DollarSign className="h-6 w-6 text-blue-600" />
                 </div>
-                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Saldo do Dia</span>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Saldo Final</span>
               </div>
               <p className="text-sm font-medium text-gray-500">Inicial + Entradas - Saídas</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
@@ -805,7 +1039,7 @@ export default function FinanceiroPage() {
                 <div className="p-3 rounded-xl bg-purple-50">
                   <Lock className="h-6 w-6 text-purple-600" />
                 </div>
-                <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">Saldo Final</span>
+                <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">Saldo em Dinheiro</span>
               </div>
               <p className="text-sm font-medium text-gray-500">Dinheiro disponível</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
@@ -930,140 +1164,200 @@ export default function FinanceiroPage() {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Status de fechamento */}
-                  {boxStatus && (
-                    <>
-                      {boxStatus.userClosure && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-xl text-sm font-semibold">
-                          <CheckCircle2 className="h-4 w-4" />
-                          {boxStatus.userClosure.closureType === 'RECEPTIONIST' ? 'Seu Caixa Fechado' : 'Caixa Admin Fechado'}
-                        </div>
-                      )}
-                      {boxStatus.receptionistClosures && boxStatus.receptionistClosures.length > 0 && (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold">
-                          <CheckCircle2 className="h-4 w-4" />
-                          {boxStatus.receptionistClosures.length} Caixa(s) Recepcionista Fechado(s)
-                        </div>
-                      )}
-                      {boxStatus.adminClosures && boxStatus.adminClosures.length > 0 && (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Caixa Admin Fechado
-                        </div>
-                      )}
-                    </>
-                  )}
+                  {/* Status de fechamento - Mostrar apenas uma mensagem baseada no caixa selecionado */}
+                  {boxStatus && (() => {
+                    // Para ADMIN/OWNER: mostrar status apenas do caixa selecionado no dropdown
+                    // Para RECEPTIONIST: mostrar status do próprio caixa
+                    if (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') {
+                      // Se há um usuário selecionado no dropdown, mostrar status desse caixa específico
+                      if (selectedBoxUserId) {
+                        // Verificar se o caixa selecionado está fechado
+                        const selectedClosure = boxStatus.userClosure;
+                        if (selectedClosure) {
+                          return (
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold ${
+                              selectedClosure.closureType === 'ADMIN' 
+                                ? 'bg-purple-50 text-purple-700' 
+                                : 'bg-orange-50 text-orange-700'
+                            }`}>
+                              <CheckCircle2 className="h-4 w-4" />
+                              {selectedClosure.closureType === 'ADMIN' ? 'Caixa Admin Fechado' : 'Caixa Recepção Fechado'}
+                            </div>
+                          );
+                        }
+                      } else {
+                        // Sem seleção: mostrar apenas se o caixa ADMIN está fechado
+                        if (boxStatus.adminClosures && boxStatus.adminClosures.length > 0) {
+                          return (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold">
+                              <CheckCircle2 className="h-4 w-4" />
+                              Caixa Admin Fechado
+                            </div>
+                          );
+                        }
+                      }
+                    } else if (getUserRole() === 'RECEPTIONIST') {
+                      // Para recepcionista: mostrar apenas se o próprio caixa está fechado
+                      if (boxStatus.userClosure && boxStatus.userClosure.closureType === 'RECEPTIONIST') {
+                        return (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-700 rounded-xl text-sm font-semibold">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Seu Caixa Fechado
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                   {/* Botões de ação */}
                   {(!boxStatus?.userClosure || (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER')) && (
                     <>
-                      {getUserRole() === 'RECEPTIONIST' && !boxStatus?.userClosure && (
-                        <button
-                          onClick={async () => {
-                            setLoadingPreview(true);
-                            
-                            // Verificar se já existe fechamento RECEPTIONIST para este usuário neste dia
-                            const existingReceptionistClosure = boxStatus?.userClosure;
-                            if (existingReceptionistClosure && existingReceptionistClosure.closureType === 'RECEPTIONIST') {
-                              setLastSavedClosureId(existingReceptionistClosure.id);
-                            } else {
-                              setLastSavedClosureId(null);
-                            }
-                            
-                            try {
-                              const preview = await financeService.getClosurePreview(selectedDate, 'RECEPTIONIST');
-                              setClosurePreview(preview);
-                              setClosureFormData({
-                                initialBalance: String(preview.previousDayFinalBalance || '0'),
-                                finalBalance: String(preview.suggestedFinalBalance || '0'),
-                                cashCount: String((preview.balancesByMethod?.['Dinheiro']?.income || 0) - (preview.balancesByMethod?.['Dinheiro']?.expense || 0)),
-                                cardCount: String(((preview.balancesByMethod?.['Cartão de Débito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Débito']?.expense || 0)) + ((preview.balancesByMethod?.['Cartão de Crédito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Crédito']?.expense || 0))),
-                                pixCount: String((preview.balancesByMethod?.['PIX']?.income || 0) - (preview.balancesByMethod?.['PIX']?.expense || 0)),
-                                observations: '',
-                                paymentMethod: '',
-                              });
-                            } catch (error) {
-                              console.error('Erro ao carregar preview:', error);
-                              setClosurePreview(null);
-                              setClosureFormData({
-                                initialBalance: '',
-                                finalBalance: '',
-                                cashCount: '',
-                                cardCount: '',
-                                pixCount: '',
-                                observations: '',
-                                paymentMethod: '',
-                              });
-                            }
-                            setLoadingPreview(false);
-                            setIsReceptionistClosureModalOpen(true);
-                          }}
-                          className="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-xl hover:bg-orange-700 transition-colors"
-                        >
-                          <Lock className="h-4 w-4 mr-2" /> Fechar Meu Caixa
-                        </button>
+                      {getUserRole() === 'RECEPTIONIST' && (
+                        !boxStatus?.userClosure || boxStatus.userClosure.closureType !== 'RECEPTIONIST' ? (
+                          <button
+                            onClick={async () => {
+                              setLoadingPreview(true);
+                              
+                              // Verificar se já existe fechamento RECEPTIONIST para este usuário neste dia
+                              const existingReceptionistClosure = boxStatus?.userClosure;
+                              if (existingReceptionistClosure && existingReceptionistClosure.closureType === 'RECEPTIONIST') {
+                                setLastSavedClosureId(existingReceptionistClosure.id);
+                              } else {
+                                setLastSavedClosureId(null);
+                              }
+                              
+                              try {
+                                const preview = await financeService.getClosurePreview(selectedDate, 'RECEPTIONIST');
+                                setClosurePreview(preview);
+                                setClosureFormData({
+                                  initialBalance: String(preview.previousDayFinalBalance || '0'),
+                                  finalBalance: String(preview.suggestedFinalBalance || '0'),
+                                  cashCount: String((preview.balancesByMethod?.['Dinheiro']?.income || 0) - (preview.balancesByMethod?.['Dinheiro']?.expense || 0)),
+                                  cardCount: String(((preview.balancesByMethod?.['Cartão de Débito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Débito']?.expense || 0)) + ((preview.balancesByMethod?.['Cartão de Crédito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Crédito']?.expense || 0))),
+                                  pixCount: String((preview.balancesByMethod?.['PIX']?.income || 0) - (preview.balancesByMethod?.['PIX']?.expense || 0)),
+                                  observations: '',
+                                  paymentMethod: '',
+                                });
+                              } catch (error) {
+                                console.error('Erro ao carregar preview:', error);
+                                setClosurePreview(null);
+                                setClosureFormData({
+                                  initialBalance: '',
+                                  finalBalance: '',
+                                  cashCount: '',
+                                  cardCount: '',
+                                  pixCount: '',
+                                  observations: '',
+                                  paymentMethod: '',
+                                });
+                              }
+                              setLoadingPreview(false);
+                              setIsReceptionistClosureModalOpen(true);
+                            }}
+                            disabled={boxStatus?.hasReceptionistClosure || (boxStatus?.userClosure?.closureType === 'RECEPTIONIST')}
+                            className={`inline-flex items-center px-4 py-2 text-white text-sm font-semibold rounded-xl transition-colors ${
+                              boxStatus?.hasReceptionistClosure || (boxStatus?.userClosure?.closureType === 'RECEPTIONIST')
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-orange-600 hover:bg-orange-700'
+                            }`}
+                          >
+                            <Lock className="h-4 w-4 mr-2" /> Fechar Meu Caixa
+                          </button>
+                        ) : (
+                          <div className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-500 text-sm font-semibold rounded-xl cursor-not-allowed">
+                            <Lock className="h-4 w-4 mr-2" /> Caixa Fechado
+                          </div>
+                        )
                       )}
-                      {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (
-                        <>
-                          {!boxStatus?.adminClosures || boxStatus.adminClosures.length === 0 ? (
-                            <button
-                              onClick={async () => {
-                                setLoadingPreview(true);
-                                
-                                // Verificar se já existe fechamento ADMIN para este dia
-                                const existingAdminClosure = boxStatus?.closures?.find(
-                                  (c: any) => c.closureType === 'ADMIN'
-                                );
-                                if (existingAdminClosure) {
-                                  // Se já existe, setar o ID para mostrar tela de sucesso
-                                  setLastSavedClosureId(existingAdminClosure.id);
-                                } else {
-                                  setLastSavedClosureId(null);
-                                }
-                                
-                                try {
-                                  const preview = await financeService.getClosurePreview(selectedDate, 'ADMIN');
-                                  setClosurePreview(preview);
-                                  setClosureFormData({
-                                    initialBalance: String(preview.previousDayFinalBalance || '0'),
-                                    finalBalance: String(preview.suggestedFinalBalance || '0'),
-                                    cashCount: String((preview.balancesByMethod?.['Dinheiro']?.income || 0) - (preview.balancesByMethod?.['Dinheiro']?.expense || 0)),
-                                    cardCount: String(((preview.balancesByMethod?.['Cartão de Débito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Débito']?.expense || 0)) + ((preview.balancesByMethod?.['Cartão de Crédito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Crédito']?.expense || 0))),
-                                    pixCount: String((preview.balancesByMethod?.['PIX']?.income || 0) - (preview.balancesByMethod?.['PIX']?.expense || 0)),
-                                    observations: '',
-                                    paymentMethod: '',
-                                  });
-                                } catch (error) {
-                                  console.error('Erro ao carregar preview:', error);
-                                  setClosurePreview(null);
-                                  setClosureFormData({
-                                    initialBalance: '',
-                                    finalBalance: '',
-                                    cashCount: '',
-                                    cardCount: '',
-                                    pixCount: '',
-                                    observations: '',
-                                    paymentMethod: '',
-                                  });
-                                }
-                                setLoadingPreview(false);
-                                setIsAdminClosureModalOpen(true);
-                              }}
-                              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-xl hover:bg-purple-700 transition-colors"
-                            >
-                              <Lock className="h-4 w-4 mr-2" /> Fechar Caixa Admin
-                            </button>
-                          ) : null}
-                        </>
-                      )}
+                      {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (() => {
+                        // Verificar se o caixa ADMIN está fechado (apenas quando não há usuário selecionado)
+                        // Se há usuário selecionado, não mostrar botão de fechar caixa admin
+                        if (selectedBoxUserId) {
+                          // Se há usuário selecionado, não mostrar botão de fechar caixa admin
+                          return null;
+                        }
+                        
+                        const isAdminBoxClosed = boxStatus?.adminClosures && boxStatus.adminClosures.length > 0;
+                        
+                        if (isAdminBoxClosed) {
+                          return (
+                            <div className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-500 text-sm font-semibold rounded-xl cursor-not-allowed">
+                              <Lock className="h-4 w-4 mr-2" /> Caixa Fechado
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <button
+                            onClick={async () => {
+                              setLoadingPreview(true);
+                              
+                              // Verificar se já existe fechamento ADMIN para este dia
+                              const existingAdminClosure = boxStatus?.closures?.find(
+                                (c: any) => c.closureType === 'ADMIN'
+                              );
+                              if (existingAdminClosure) {
+                                // Se já existe, setar o ID para mostrar tela de sucesso
+                                setLastSavedClosureId(existingAdminClosure.id);
+                              } else {
+                                setLastSavedClosureId(null);
+                              }
+                              
+                              try {
+                                const preview = await financeService.getClosurePreview(selectedDate, 'ADMIN');
+                                setClosurePreview(preview);
+                                setClosureFormData({
+                                  initialBalance: String(preview.previousDayFinalBalance || '0'),
+                                  finalBalance: String(preview.suggestedFinalBalance || '0'),
+                                  cashCount: String((preview.balancesByMethod?.['Dinheiro']?.income || 0) - (preview.balancesByMethod?.['Dinheiro']?.expense || 0)),
+                                  cardCount: String(((preview.balancesByMethod?.['Cartão de Débito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Débito']?.expense || 0)) + ((preview.balancesByMethod?.['Cartão de Crédito']?.income || 0) - (preview.balancesByMethod?.['Cartão de Crédito']?.expense || 0))),
+                                  pixCount: String((preview.balancesByMethod?.['PIX']?.income || 0) - (preview.balancesByMethod?.['PIX']?.expense || 0)),
+                                  observations: '',
+                                  paymentMethod: '',
+                                });
+                              } catch (error) {
+                                console.error('Erro ao carregar preview:', error);
+                                setClosurePreview(null);
+                                setClosureFormData({
+                                  initialBalance: '',
+                                  finalBalance: '',
+                                  cashCount: '',
+                                  cardCount: '',
+                                  pixCount: '',
+                                  observations: '',
+                                  paymentMethod: '',
+                                });
+                              }
+                              setLoadingPreview(false);
+                              setIsAdminClosureModalOpen(true);
+                            }}
+                            className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-xl hover:bg-purple-700 transition-colors"
+                          >
+                            <Lock className="h-4 w-4 mr-2" /> Fechar Caixa Admin
+                          </button>
+                        );
+                      })()}
                       {(() => {
                         // Verificar se o caixa está fechado para o usuário selecionado
-                        const isBoxClosed = boxStatus?.userClosure && 
-                          ((getUserRole() === 'RECEPTIONIST' && boxStatus.userClosure.closureType === 'RECEPTIONIST') ||
-                           ((getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && boxStatus.userClosure.closureType === 'ADMIN'));
+                        let isBoxClosed = false;
+                        
+                        if (getUserRole() === 'RECEPTIONIST') {
+                          // Recepcionista: verificar se o próprio caixa está fechado
+                          isBoxClosed = boxStatus?.userClosure?.closureType === 'RECEPTIONIST' || boxStatus?.hasReceptionistClosure;
+                        } else if (getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') {
+                          // Admin: verificar se o caixa selecionado está fechado
+                          if (selectedBoxUserId) {
+                            // Se há um usuário selecionado, verificar se esse caixa específico está fechado
+                            isBoxClosed = boxStatus?.userClosure?.closureType === 'RECEPTIONIST' || boxStatus?.userClosure?.closureType === 'ADMIN';
+                          } else {
+                            // Sem seleção: verificar se o caixa ADMIN está fechado
+                            isBoxClosed = boxStatus?.adminClosures && boxStatus.adminClosures.length > 0;
+                          }
+                        }
                         
                         if (isBoxClosed) {
                           return (
-                            <div className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-500 text-sm font-semibold rounded-xl cursor-not-allowed">
+                            <div className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-500 text-sm font-semibold rounded-xl cursor-not-allowed" title="O caixa deste dia já foi fechado. Não é possível criar novos lançamentos.">
                               <Lock className="h-4 w-4 mr-2" /> Caixa Fechado
                             </div>
                           );
@@ -1754,6 +2048,20 @@ export default function FinanceiroPage() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  {/* Saldo Final Calculado */}
+                  <div className="bg-gradient-to-r from-blue-100 to-blue-50 p-4 rounded-xl border border-blue-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Saldo Final Calculado:</span>
+                      <span className="text-2xl font-bold text-blue-700">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                          (closurePreview?.previousDayFinalBalance || 0) + 
+                          (closurePreview?.totalIncome || 0) - 
+                          (closurePreview?.totalExpense || 0)
+                        )}
+                      </span>
                     </div>
                   </div>
 

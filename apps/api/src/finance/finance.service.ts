@@ -117,21 +117,40 @@ export class FinanceService {
       categoryId: dto.categoryId,
     });
 
-    const transaction = await this.prisma.client.transaction.create({
-      data: {
-        ...dto,
-        tenantId,
-        createdById: userId || null,
-      },
-      include: {
-        patient: { select: { name: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true } },
-          },
+    // Usar transação atômica para criar transação e atualizar appointment (se necessário)
+    const transaction = await this.prisma.client.$transaction(async (tx) => {
+      // Criar transação dentro da transação
+      const newTransaction = await tx.transaction.create({
+        data: {
+          ...dto,
+          tenantId,
+          createdById: userId || null,
         },
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
+        include: {
+          patient: { select: { name: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true } },
+            },
+          },
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      // Atualizar status do appointment para "AGUARDANDO" (confirmed) quando pagamento é efetuado
+      if (dto.appointmentId && dto.type === TransactionType.INCOME) {
+        try {
+          await tx.appointment.update({
+            where: { id: dto.appointmentId },
+            data: { status: 'confirmed' },
+          });
+        } catch (error) {
+          // Log do erro mas não falha a criação da transação
+          console.error(`Erro ao atualizar status do appointment ${dto.appointmentId}:`, error);
+        }
+      }
+
+      return newTransaction;
     });
 
     console.log(`[FinanceService] Transação criada:`, {
@@ -605,35 +624,52 @@ export class FinanceService {
       realPeriodEnd,
     });
 
-    // 5. Criar registro de fechamento com período real
-    const payment = await this.prisma.client.medicalFeePayment.create({
-      data: {
-        tenantId,
-        staffId: dto.staffId,
-        periodStart: realPeriodStart,
-        periodEnd: realPeriodEnd,
-        totalAmount,
-        feesCount: pendingFees.length,
-        paidAt: new Date(),
-        paidBy: userId,
-        paymentMethod: dto.paymentMethod,
-        observations: dto.observations,
-      },
+    // 5. Usar transação atômica para criar fechamento e atualizar repasses
+    const payment = await this.prisma.client.$transaction(async (tx) => {
+      // Verificar novamente dentro da transação se os repasses ainda estão pendentes
+      const feesInTx = await tx.medicalFee.findMany({
+        where: {
+          id: { in: pendingFees.map(f => f.id) },
+          status: 'pending',
+        },
+      });
+
+      if (feesInTx.length !== pendingFees.length) {
+        throw new BadRequestException('Alguns repasses já foram fechados. Por favor, recarregue a página e tente novamente.');
+      }
+
+      // Criar registro de fechamento dentro da transação
+      const paymentRecord = await tx.medicalFeePayment.create({
+        data: {
+          tenantId,
+          staffId: dto.staffId,
+          periodStart: realPeriodStart,
+          periodEnd: realPeriodEnd,
+          totalAmount,
+          feesCount: pendingFees.length,
+          paidAt: new Date(),
+          paidBy: userId,
+          paymentMethod: dto.paymentMethod,
+          observations: dto.observations,
+        },
+      });
+
+      // Atualizar todos os repasses para 'paid' e vincular ao pagamento dentro da transação
+      await tx.medicalFee.updateMany({
+        where: {
+          id: { in: pendingFees.map(f => f.id) },
+        },
+        data: {
+          status: 'paid',
+          paidAt: new Date(),
+          paymentId: paymentRecord.id,
+        },
+      });
+
+      return paymentRecord;
     });
 
-    // 6. Atualizar todos os repasses para 'paid' e vincular ao pagamento
-    await this.prisma.client.medicalFee.updateMany({
-      where: {
-        id: { in: pendingFees.map(f => f.id) },
-      },
-      data: {
-        status: 'paid',
-        paidAt: new Date(),
-        paymentId: payment.id,
-      },
-    });
-
-    // 7. Retornar o fechamento com detalhes
+    // 6. Retornar o fechamento com detalhes
     return this.prisma.client.medicalFeePayment.findUnique({
       where: { id: payment.id },
       include: {
@@ -758,21 +794,29 @@ export class FinanceService {
       throw new NotFoundException('Transação não encontrada');
     }
 
-    // 2. Verificar se o caixa do dia não foi fechado
+    // 2. Verificar imutabilidade: se o caixa do dia foi fechado, não permitir edição
     const transactionDate = new Date(transaction.createdAt);
     transactionDate.setHours(0, 0, 0, 0);
+    
+    // Converter para UTC para comparação com o campo date (DATE type)
+    const [year, month, day] = [
+      transactionDate.getFullYear(),
+      transactionDate.getMonth() + 1,
+      transactionDate.getDate()
+    ];
+    const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
-    // Verificar fechamento administrativo
+    // Verificar fechamento administrativo (bloqueia TODAS as transações do dia)
     const adminClosure = await this.prisma.client.dailyClosure.findFirst({
       where: {
         tenantId,
-        date: transactionDate,
+        date: targetDate,
         closureType: 'ADMIN',
       },
     });
 
     if (adminClosure) {
-      throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível editar transações.');
+      throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.');
     }
 
     // Se for recepcionista, verificar fechamento do próprio caixa
@@ -780,14 +824,14 @@ export class FinanceService {
       const receptionistClosure = await this.prisma.client.dailyClosure.findFirst({
         where: {
           tenantId,
-          date: transactionDate,
+          date: targetDate,
           createdById: userId,
           closureType: 'RECEPTIONIST',
         },
       });
 
       if (receptionistClosure) {
-        throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível editar transações.');
+        throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.');
       }
 
       // Recepcionista só pode editar transações que ele criou
@@ -796,60 +840,103 @@ export class FinanceService {
       }
     }
 
-    // 3. Não permitir editar transações com repasse pago
+    // 3. Não permitir editar transações com repasse pago (imutabilidade financeira)
     if (transaction.medicalFee && transaction.medicalFee.status === 'paid') {
-      throw new BadRequestException('Não é possível editar uma transação com repasse médico já pago.');
+      throw new BadRequestException('Não é possível editar uma transação com repasse médico já pago. Para alterar, é necessário criar um estorno oficial.');
     }
 
-    // 4. Atualizar a transação
-    const updatedTransaction = await this.prisma.client.transaction.update({
-      where: { id: transactionId },
-      data: {
-        category: dto.category !== undefined ? dto.category : undefined,
-        amount: dto.amount !== undefined ? dto.amount : undefined,
-        method: dto.method !== undefined ? dto.method : undefined,
-        description: dto.description !== undefined ? dto.description : undefined,
-        categoryId: dto.categoryId !== undefined ? dto.categoryId : undefined,
-      },
-      include: {
-        patient: { select: { name: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true } },
-            procedure: { select: { name: true } },
-          },
-        },
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    // 5. Se o valor mudou, atualizar o repasse médico
-    if (dto.amount !== undefined && transaction.medicalFee) {
-      // Buscar configuração do médico para recalcular o repasse
-      const staff = await this.prisma.client.staff.findUnique({
-        where: { id: transaction.medicalFee.staffId },
+    // 4. Usar transação atômica para atualizar transação e repasse (se necessário)
+    const updatedTransaction = await this.prisma.client.$transaction(async (tx) => {
+      // Verificar novamente dentro da transação (double-check para evitar race conditions)
+      const transactionInTx = await tx.transaction.findUnique({
+        where: { id: transactionId },
+        include: { medicalFee: true },
       });
 
-      if (staff) {
-        const commissionType = staff.commissionType || 'PERCENTAGE';
-        let newFeeAmount = 0;
+      if (!transactionInTx) {
+        throw new NotFoundException('Transação não encontrada');
+      }
 
-        if (commissionType === 'FIXED') {
-          newFeeAmount = Number(staff.fixedCommission || 0);
-        } else {
-          const rate = Number(staff.commissionRate || 0);
-          newFeeAmount = (Number(dto.amount) * rate) / 100;
-        }
+      // Verificar novamente se o caixa foi fechado (dentro da transação)
+      const adminClosureInTx = await tx.dailyClosure.findFirst({
+        where: {
+          tenantId,
+          date: targetDate,
+          closureType: 'ADMIN',
+        },
+      });
 
-        await this.prisma.client.medicalFee.update({
-          where: { id: transaction.medicalFee.id },
-          data: {
-            grossAmount: dto.amount,
-            feeAmount: newFeeAmount,
+      if (adminClosureInTx) {
+        throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível editar transações.');
+      }
+
+      if (userRole === UserRole.RECEPTIONIST && userId) {
+        const receptionistClosureInTx = await tx.dailyClosure.findFirst({
+          where: {
+            tenantId,
+            date: targetDate,
+            createdById: userId,
+            closureType: 'RECEPTIONIST',
           },
         });
+
+        if (receptionistClosureInTx) {
+          throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível editar transações.');
+        }
       }
-    }
+
+      // Atualizar a transação dentro da transação
+      const updated = await tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          category: dto.category !== undefined ? dto.category : undefined,
+          amount: dto.amount !== undefined ? dto.amount : undefined,
+          method: dto.method !== undefined ? dto.method : undefined,
+          description: dto.description !== undefined ? dto.description : undefined,
+          categoryId: dto.categoryId !== undefined ? dto.categoryId : undefined,
+        },
+        include: {
+          patient: { select: { name: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true } },
+              procedure: { select: { name: true } },
+            },
+          },
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      // 5. Se o valor mudou, atualizar o repasse médico dentro da mesma transação
+      if (dto.amount !== undefined && transactionInTx.medicalFee && transactionInTx.medicalFee.status === 'pending') {
+        // Buscar configuração do médico para recalcular o repasse
+        const staff = await tx.staff.findUnique({
+          where: { id: transactionInTx.medicalFee.staffId },
+        });
+
+        if (staff) {
+          const commissionType = staff.commissionType || 'PERCENTAGE';
+          let newFeeAmount = 0;
+
+          if (commissionType === 'FIXED') {
+            newFeeAmount = Number(staff.fixedCommission || 0);
+          } else {
+            const rate = Number(staff.commissionRate || 0);
+            newFeeAmount = (Number(dto.amount) * rate) / 100;
+          }
+
+          await tx.medicalFee.update({
+            where: { id: transactionInTx.medicalFee.id },
+            data: {
+              grossAmount: dto.amount,
+              feeAmount: newFeeAmount,
+            },
+          });
+        }
+      }
+
+      return updated;
+    });
 
     console.log(`[FinanceService] Transação ${transactionId} atualizada com sucesso`);
 
@@ -857,23 +944,28 @@ export class FinanceService {
   }
 
   async getDailyTransactions(tenantId: string, date?: string, createdById?: string) {
-    // Parse da data considerando timezone local
-    let targetDate: Date;
+    // Parse da data e criar range no horário de Brasília (UTC-3)
+    // Isso garante consistência com o fechamento de caixa
+    let year: number, month: number, day: number;
+    
     if (date) {
-      // Se a data vem como 'yyyy-MM-dd', criar Date no timezone local
-      const [year, month, day] = date.split('-').map(Number);
-      targetDate = new Date(year, month - 1, day);
+      [year, month, day] = date.split('-').map(Number);
     } else {
-      targetDate = new Date();
+      const now = new Date();
+      // Ajustar para horário de Brasília
+      const brDate = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+      year = brDate.getUTCFullYear();
+      month = brDate.getUTCMonth() + 1;
+      day = brDate.getUTCDate();
     }
     
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Criar range no horário de Brasília convertido para UTC
+    // Brasília = UTC-3, então meia-noite em Brasília = 03:00 UTC
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
 
     console.log(`[FinanceService] Buscando transações para tenant ${tenantId}, data: ${date || 'hoje'}`);
-    console.log(`[FinanceService] Range: ${startOfDay.toISOString()} até ${endOfDay.toISOString()}`);
+    console.log(`[FinanceService] Range (Brasília): ${startOfDay.toISOString()} até ${endOfDay.toISOString()}`);
 
     const where: any = {
       tenantId,
@@ -990,34 +1082,52 @@ export class FinanceService {
       difference,
     });
 
+    // Usar transação atômica para garantir integridade
     try {
-      const closure = await this.prisma.client.dailyClosure.create({
-        data: {
-          tenantId,
-          date: targetDate,
-          createdById: userId,
-          closureType: 'RECEPTIONIST',
-          initialBalance: dto.initialBalance,
-          finalBalance: dto.finalBalance,
-          totalIncome,
-          totalExpense,
-          netBalance,
-          cashCount: dto.cashCount,
-          cardCount: dto.cardCount,
-          pixCount: dto.pixCount,
-          difference,
-          observations: dto.observations,
-        },
-        include: {
-          closedBy: { select: { id: true, name: true, email: true } },
-        },
+      const closure = await this.prisma.client.$transaction(async (tx) => {
+        // Verificar novamente dentro da transação (double-check)
+        const existingInTx = await tx.dailyClosure.findFirst({
+          where: {
+            tenantId,
+            date: targetDate,
+            createdById: userId,
+            closureType: 'RECEPTIONIST',
+          },
+        });
+
+        if (existingInTx) {
+          throw new BadRequestException('Seu caixa deste dia já está fechado.');
+        }
+
+        // Criar fechamento dentro da transação
+        return await tx.dailyClosure.create({
+          data: {
+            tenantId,
+            date: targetDate,
+            createdById: userId,
+            closureType: 'RECEPTIONIST',
+            initialBalance: dto.initialBalance,
+            finalBalance: dto.finalBalance,
+            totalIncome,
+            totalExpense,
+            netBalance,
+            cashCount: dto.cashCount,
+            cardCount: dto.cardCount,
+            pixCount: dto.pixCount,
+            difference,
+            observations: dto.observations,
+          },
+          include: {
+            closedBy: { select: { id: true, name: true, email: true } },
+          },
+        });
       });
       
       console.log(`[FinanceService.closeReceptionistBox] Fechamento criado com sucesso:`, closure.id);
       return closure;
     } catch (error: any) {
       console.error(`[FinanceService.closeReceptionistBox] Erro ao criar fechamento:`, error);
-      if (error.code === 'P2002') {
+      if (error.code === 'P2002' || error instanceof BadRequestException) {
         throw new BadRequestException('Seu caixa deste dia já está fechado.');
       }
       throw error;
@@ -1098,34 +1208,51 @@ export class FinanceService {
       difference,
     });
 
+    // Usar transação atômica para garantir integridade
     try {
-      const closure = await this.prisma.client.dailyClosure.create({
-        data: {
-          tenantId,
-          date: targetDate,
-          createdById: userId,
-          closureType: 'ADMIN',
-          initialBalance: dto.initialBalance,
-          finalBalance: dto.finalBalance,
-          totalIncome,
-          totalExpense,
-          netBalance,
-          cashCount: dto.cashCount,
-          cardCount: dto.cardCount,
-          pixCount: dto.pixCount,
-          difference,
-          observations: dto.observations,
-        },
-        include: {
-          closedBy: { select: { id: true, name: true, email: true } },
-        },
+      const closure = await this.prisma.client.$transaction(async (tx) => {
+        // Verificar novamente dentro da transação (double-check)
+        const existingInTx = await tx.dailyClosure.findFirst({
+          where: {
+            tenantId,
+            date: targetDate,
+            closureType: 'ADMIN',
+          },
+        });
+
+        if (existingInTx) {
+          throw new BadRequestException('O caixa administrativo deste dia já está fechado.');
+        }
+
+        // Criar fechamento dentro da transação
+        return await tx.dailyClosure.create({
+          data: {
+            tenantId,
+            date: targetDate,
+            createdById: userId,
+            closureType: 'ADMIN',
+            initialBalance: dto.initialBalance,
+            finalBalance: dto.finalBalance,
+            totalIncome,
+            totalExpense,
+            netBalance,
+            cashCount: dto.cashCount,
+            cardCount: dto.cardCount,
+            pixCount: dto.pixCount,
+            difference,
+            observations: dto.observations,
+          },
+          include: {
+            closedBy: { select: { id: true, name: true, email: true } },
+          },
+        });
       });
       
       console.log(`[FinanceService.closeAdminBox] Fechamento criado com sucesso:`, closure.id);
       return closure;
     } catch (error: any) {
       console.error(`[FinanceService.closeAdminBox] Erro ao criar fechamento:`, error);
-      if (error.code === 'P2002') {
+      if (error.code === 'P2002' || error instanceof BadRequestException) {
         throw new BadRequestException('O caixa administrativo deste dia já está fechado.');
       }
       throw error;
@@ -1194,8 +1321,10 @@ export class FinanceService {
   }
 
   async getClosureStatus(tenantId: string, date: string, userId?: string, closureType?: string) {
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
+    // Criar data em UTC para comparação com o campo date (DATE type)
+    // O campo date armazena apenas yyyy-MM-dd, que o Prisma retorna como meia-noite UTC
+    const [year, month, day] = date.split('-').map(Number);
+    const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
     if (userId && closureType) {
       // Buscar fechamento específico
@@ -1228,10 +1357,10 @@ export class FinanceService {
   }
 
   async getBoxStatus(tenantId: string, date: string, userId?: string) {
-    // Parse da data considerando timezone local (mesmo que getDailyTransactions)
+    // Parse da data e criar em UTC para comparação com campo date (DATE type)
     const [year, month, day] = date.split('-').map(Number);
-    const targetDate = new Date(year, month - 1, day);
-    targetDate.setHours(0, 0, 0, 0);
+    // Para comparação com DailyClosure.date (DATE type), usar meia-noite UTC
+    const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
     console.log('[FinanceService.getBoxStatus] Iniciando para:', { tenantId, date, userId, targetDate: targetDate.toISOString() });
 
@@ -1283,11 +1412,9 @@ export class FinanceService {
     const adminClosures = closures.filter(c => c.closureType === 'ADMIN');
 
     // Buscar transações do dia para calcular saldos por método
-    // Usar mesma lógica de range que getDailyTransactions
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Usar mesmo range de horário de Brasília (UTC-3) que getDailyTransactions e fechamento
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
     
     const transactionWhere: any = {
       tenantId,
@@ -1434,10 +1561,11 @@ export class FinanceService {
     const where: any = { tenantId };
 
     if (startDate && endDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
+      // Converter datas para UTC para comparação com o campo date (DATE type)
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+      const start = new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(endYear, endMonth - 1, endDay, 0, 0, 0, 0));
       where.date = { gte: start, lte: end };
     }
 
@@ -1482,11 +1610,12 @@ export class FinanceService {
    * Inclui todas as transações do dia e os saldos calculados
    */
   async getClosurePreview(tenantId: string, date: string, userId: string, closureType: string) {
-    const targetDate = new Date(date + 'T00:00:00');
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Usar range de horário de Brasília (UTC-3) consistente com getDailyTransactions e fechamento
+    const [year, month, day] = date.split('-').map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
+    // Data alvo para comparação com campo DATE (meia-noite UTC)
+    const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
     // Buscar transações do dia
     const where: any = {
