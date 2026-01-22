@@ -1,42 +1,44 @@
 # Dependencies
-node_modules
+node_modules/
 .pnp
 .pnp.js
 
 # Testing
-coverage
+coverage/
+*.log
 
 # Production
-dist
-build
-.next
-out
+build/
+dist/
+.next/
+out/
 
-# Misc
-.DS_Store
-*.pem
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Local env files
-.env*.local
+# Environment variables
 .env
-
-# Vercel
-.vercel
-
-# Turbo
-.turbo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # IDE
-.vscode
-.idea
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+packages/db/prisma/migrations/
+
+# Turbo
+.turbo/
+
+# Vercel
+.vercel
+
+# Render
+.render/

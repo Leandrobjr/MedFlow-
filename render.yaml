@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: medflow-api
+    env: node
+    region: oregon  # Escolha: oregon, frankfurt, singapore, sydney, mumbai
+    buildCommand: cd apps/api && pnpm install && pnpm build && cd ../../packages/db && pnpm prisma generate
+    startCommand: cd apps/api && pnpm start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # As seguintes variáveis devem ser configuradas manualmente no painel do Render:
+      # - DATABASE_URL (do Supabase)
+      # - JWT_SECRET (gerar uma senha aleatória)
+      # - FRONTEND_URL (URL da Vercel)
+      # - RESEND_API_KEY (do Resend, se usar e-mails)
+      # - RESEND_FROM_EMAIL (e-mail remetente)
