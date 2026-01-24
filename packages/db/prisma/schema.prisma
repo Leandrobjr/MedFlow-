@@ -284,6 +284,9 @@ model MedicalFee {
   transaction Transaction        @relation(fields: [transactionId], references: [id])
   payment     MedicalFeePayment? @relation(fields: [paymentId], references: [id])
 
+  @@index([tenantId, staffId, status, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([paymentId])
   @@map("medical_fees")
 }
 
