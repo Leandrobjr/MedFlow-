@@ -1,5 +1,5 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger, BadRequestException } from '@nestjs/common';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
@@ -141,11 +141,97 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   /**
    * Define o contexto de tenant para o Row Level Security (RLS) no Postgres.
    * Deve ser chamado no início de cada request que precise isolamento.
+   * 
+   * @deprecated Use `withTenant()` para operações que precisam de garantia de isolamento.
+   * Este método ainda é usado pelo TenantMiddleware para compatibilidade.
    */
   async setTenantContext(tenantId: string) {
     await this.client.$executeRawUnsafe(
       `SET LOCAL medflow.current_tenant = '${tenantId}';`,
     );
+  }
+
+  /**
+   * Valida se uma string é um UUID válido.
+   * 
+   * @param uuid - String a ser validada
+   * @returns true se for UUID válido, false caso contrário
+   */
+  private isValidUUID(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
+  /**
+   * Executa uma função dentro de uma transação com o contexto de tenant configurado.
+   * Garante que todas as queries dentro da função usem o RLS correto.
+   * 
+   * O método abre uma transação, configura `medflow.current_tenant` usando `set_config`,
+   * valida que o contexto foi setado corretamente, e executa a função passada.
+   * O contexto de tenant persiste durante toda a transação.
+   * 
+   * **FASE 2.4:** Garantias de robustez:
+   * - Valida que tenantId é UUID válido
+   * - Executa set_config('medflow.current_tenant', tenantId, true)
+   * - Valida current_setting para confirmar que foi setado corretamente
+   * - Tipagem correta com Prisma.TransactionClient
+   * 
+   * @param tenantId - ID do tenant a ser usado no contexto (deve ser UUID válido)
+   * @param fn - Função a ser executada dentro da transação com contexto de tenant
+   * @returns Promise com o resultado da função executada
+   * 
+   * @throws {BadRequestException} Se tenantId não for UUID válido
+   * 
+   * @example
+   * ```typescript
+   * const result = await prisma.withTenant(tenantId, async (tx) => {
+   *   const patient = await tx.patient.findFirst({ where: { id } });
+   *   const appointment = await tx.appointment.create({ data: {...} });
+   *   return { patient, appointment };
+   * });
+   * ```
+   */
+  async withTenant<T>(
+    tenantId: string,
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    // FASE 2.4: Garantir que o tenantId passado seja UUID válido
+    if (!tenantId || typeof tenantId !== 'string' || !this.isValidUUID(tenantId)) {
+      const errorMessage = `TenantId inválido: '${tenantId}'. Deve ser um UUID válido.`;
+      this.logger.error(`[PrismaService.withTenant] ❌ ${errorMessage}`);
+      throw new BadRequestException(errorMessage);
+    }
+
+    return this.client.$transaction(async (tx) => {
+      // FASE 2.4: Executar set_config dentro da transação
+      await tx.$executeRaw`
+        SELECT set_config('medflow.current_tenant', ${tenantId}::text, true)
+      `;
+
+      this.logger.debug(
+        `[PrismaService.withTenant] ✅ set_config aplicado para tenant: ${tenantId}`,
+      );
+
+      // FASE 2.4: Validar que o contexto foi setado corretamente
+      const validationResult = await tx.$queryRaw<Array<{ current_setting: string | null }>>`
+        SELECT current_setting('medflow.current_tenant', true) as current_setting
+      `;
+
+      const currentTenantId = validationResult[0]?.current_setting;
+
+      if (!currentTenantId || currentTenantId !== tenantId) {
+        const errorMessage = `Falha ao configurar contexto de tenant. Esperado: ${tenantId}, Obtido: ${currentTenantId || 'null'}.`;
+        this.logger.error(`[PrismaService.withTenant] ❌ ${errorMessage}`);
+        throw new BadRequestException(errorMessage);
+      }
+
+      this.logger.debug(
+        `[PrismaService.withTenant] ✅ Validação: contexto de tenant confirmado: ${currentTenantId}`,
+      );
+
+      // Executar a função passada com o cliente de transação (tipagem correta: Prisma.TransactionClient)
+      return await fn(tx);
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContextService } from '../common/tenant/tenant-context.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { UserRole } from '../common/shared-types';
@@ -10,21 +11,54 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async login(loginDto: LoginDto) {
-    const user = await this.prisma.client.user.findUnique({
-      where: { email: loginDto.email },
+    // Obter tenantId do contexto (setado pelo TenantMiddleware)
+    const tenantId = this.tenantContext.getTenantId();
+    
+    if (!tenantId) {
+      console.error(`[AUTH] ❌ Tenant não resolvido para login de ${loginDto.email}`);
+      throw new UnauthorizedException('Tenant não identificado. Verifique o header x-tenant-slug.');
+    }
+
+    console.log(`[AUTH] Tentando login para ${loginDto.email} | Tenant: ${tenantId}`);
+    
+    // Usar withTenant para garantir que o RLS funcione corretamente
+    const user = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.user.findUnique({
+        where: { email: loginDto.email },
+      });
     });
 
-    if (!user || !(await bcrypt.compare(loginDto.password, user.password))) {
+    console.log(`[AUTH] Usuário encontrado: ${user ? `SIM (tenantId: ${user.tenantId})` : 'NÃO'}`);
+
+    if (!user) {
+      console.log(`[AUTH] ❌ Usuário não encontrado para ${loginDto.email} no tenant ${tenantId}`);
       throw new UnauthorizedException('E-mail ou senha incorretos');
     }
 
-    // Buscar staffId se o usuário tiver um Staff vinculado
-    const staff = await this.prisma.client.staff.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
+    // Verificar se o usuário pertence ao tenant correto (segurança adicional)
+    if (user.tenantId !== tenantId) {
+      console.error(`[AUTH] ❌ Tentativa de login com tenant incorreto. Usuário pertence a ${user.tenantId}, mas requisição veio de ${tenantId}`);
+      throw new UnauthorizedException('E-mail ou senha incorretos');
+    }
+
+    // Verificar senha
+    if (!(await bcrypt.compare(loginDto.password, user.password))) {
+      console.log(`[AUTH] ❌ Senha incorreta para ${loginDto.email}`);
+      throw new UnauthorizedException('E-mail ou senha incorretos');
+    }
+
+    console.log(`[AUTH] ✅ Autenticação bem-sucedida para ${loginDto.email} (tenantId: ${user.tenantId})`);
+
+    // Buscar staffId se o usuário tiver um Staff vinculado (dentro do contexto de tenant)
+    const staff = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
     });
 
     const payload = {
