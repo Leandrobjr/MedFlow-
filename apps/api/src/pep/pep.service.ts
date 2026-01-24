@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto, CreateAddendumDto } from './dto/pep.dto';
 import { FinanceService } from '../finance/finance.service';
 import { AuditService } from '../audit/audit.service';
@@ -8,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 export class PepService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly tenantPrisma: TenantPrismaService,
     @Inject(forwardRef(() => FinanceService))
     private readonly financeService: FinanceService,
     private readonly auditService: AuditService,
@@ -185,7 +187,6 @@ export class PepService {
 
     // Se já estiver finalizado, ainda assim verificar se precisa criar repasse
     if (record.isFinalized) {
-      // ... existing code ...
       if (record.appointmentId) {
         try {
           console.log(`[PepService.finalize] Prontuário já finalizado. Verificando se precisa criar repasse retroativamente para appointment: ${record.appointmentId}`);
@@ -197,13 +198,26 @@ export class PepService {
       return record;
     }
 
-    // Atualizar prontuário e mudar status do appointment para completed
-    const updatedRecord = await this.prisma.client.medicalRecord.update({
-      where: { id, tenantId },
-      data: {
-        isFinalized: true,
-        finalizedAt: new Date(),
-      },
+    // Usar tenantPrisma.run para garantir isolamento determinístico em múltiplas operações
+    const updatedRecord = await this.tenantPrisma.run(async (tx) => {
+      // Atualizar prontuário e mudar status do appointment para completed dentro da mesma transação
+      const updated = await tx.medicalRecord.update({
+        where: { id, tenantId },
+        data: {
+          isFinalized: true,
+          finalizedAt: new Date(),
+        },
+      });
+
+      // Atualizar status do appointment para completed dentro da mesma transação
+      if (record.appointmentId) {
+        await tx.appointment.update({
+          where: { id: record.appointmentId },
+          data: { status: 'completed' },
+        });
+      }
+
+      return updated;
     });
 
     if (auditContext) {
@@ -221,14 +235,8 @@ export class PepService {
       */
     }
 
-    // Atualizar status do appointment para completed
+    // Criar repasse retroativamente após a transação (operação separada que pode falhar sem afetar a finalização)
     if (record.appointmentId) {
-      await this.prisma.client.appointment.update({
-        where: { id: record.appointmentId },
-        data: { status: 'completed' },
-      });
-
-      // Criar repasse retroativamente se a transação foi criada antes do prontuário ser finalizado
       try {
         console.log(`[PepService.finalize] ✅ Prontuário finalizado. Tentando criar repasse retroativamente para appointment: ${record.appointmentId}`);
         console.log(`[PepService.finalize] DEBUG - Dados do prontuário:`, {

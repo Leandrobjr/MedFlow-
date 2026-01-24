@@ -1,126 +1,130 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { CreateTransactionDto, UpdateTransactionDto, CreateClosureDto, CloseReceptionistBoxDto, CloseAdminBoxDto, CloseMedicalFeePaymentDto, TransactionType } from './dto/finance.dto';
 import { UserRole } from '../common/shared-types';
 
 @Injectable()
 export class FinanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantPrisma: TenantPrismaService,
+  ) {}
 
   async createTransaction(tenantId: string, dto: CreateTransactionDto, userId?: string, userRole?: string) {
-    // 1. Verificar se o caixa do recepcionista/admin já foi fechado
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Se for recepcionista, verificar se o caixa dele foi fechado
-    if (userRole === UserRole.RECEPTIONIST && userId) {
-      const closure = await this.prisma.client.dailyClosure.findFirst({
-        where: {
-          tenantId,
-          date: today,
-          createdById: userId,
-          closureType: 'RECEPTIONIST',
-        },
-      });
+    // Usar tenantPrisma.run para garantir isolamento determinístico em todas as operações críticas
+    return this.tenantPrisma.run(async (tx) => {
+      // 1. Verificar se o caixa do recepcionista/admin já foi fechado
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Se for recepcionista, verificar se o caixa dele foi fechado
+      if (userRole === UserRole.RECEPTIONIST && userId) {
+        const closure = await tx.dailyClosure.findFirst({
+          where: {
+            tenantId,
+            date: today,
+            createdById: userId,
+            closureType: 'RECEPTIONIST',
+          },
+        });
 
-      if (closure) {
-        throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível realizar novas transações.');
-      }
-    }
-    
-    // Se for admin, verificar se o caixa administrativo foi fechado
-    if ((userRole === UserRole.ADMIN || userRole === UserRole.OWNER) && userId) {
-      const closure = await this.prisma.client.dailyClosure.findFirst({
-        where: {
-          tenantId,
-          date: today,
-          createdById: userId,
-          closureType: 'ADMIN',
-        },
-      });
-
-      if (closure) {
-        throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível realizar novas transações.');
-      }
-    }
-
-    // 2. Validações se tiver appointmentId
-    if (dto.appointmentId) {
-      // Verificar se já existe transação para este appointment
-      const existing = await this.prisma.client.transaction.findUnique({
-        where: { appointmentId: dto.appointmentId },
-      });
-
-      if (existing) {
-        throw new BadRequestException('Este agendamento já foi faturado.');
-      }
-
-      // Verificar se o appointment existe e pertence ao tenant
-      const appointment = await this.prisma.client.appointment.findUnique({
-        where: { id: dto.appointmentId },
-      });
-
-      if (!appointment || appointment.tenantId !== tenantId) {
-        throw new NotFoundException('Agendamento não encontrado ou não pertence a este tenant.');
-      }
-
-      // Verificar se o agendamento não está cancelado
-      if (appointment.status === 'CANCELED' || appointment.status === 'canceled') {
-        throw new BadRequestException('Não é possível faturar um agendamento cancelado.');
-      }
-
-      console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
-        appointmentId: appointment.id,
-        appointmentStaffId: appointment.staffId,
-        dtoStaffId: dto.staffId,
-        staffIdsMatch: appointment.staffId === dto.staffId,
-      });
-
-      // Se não foi passado staffId, usar o do appointment
-      // IMPORTANTE: Sempre usar o staffId do appointment para garantir consistência
-      if (appointment.staffId) {
-        if (dto.staffId && dto.staffId !== appointment.staffId) {
-          console.warn(`[FinanceService.createTransaction] DEBUG - staffId do DTO (${dto.staffId}) difere do appointment (${appointment.staffId}). Usando o do appointment.`);
+        if (closure) {
+          throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível realizar novas transações.');
         }
-        dto.staffId = appointment.staffId;
-        console.log(`[FinanceService.createTransaction] DEBUG - staffId definido como: ${dto.staffId} (do appointment)`);
-      } else if (!dto.staffId) {
-        console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${appointment.id} não possui staffId e DTO também não tem. Repasse não será criado.`);
+      }
+      
+      // Se for admin, verificar se o caixa administrativo foi fechado
+      if ((userRole === UserRole.ADMIN || userRole === UserRole.OWNER) && userId) {
+        const closure = await tx.dailyClosure.findFirst({
+          where: {
+            tenantId,
+            date: today,
+            createdById: userId,
+            closureType: 'ADMIN',
+          },
+        });
+
+        if (closure) {
+          throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível realizar novas transações.');
+        }
       }
 
-      // Se não foi passado patientId, usar o do appointment
-      if (!dto.patientId && appointment.patientId) {
-        dto.patientId = appointment.patientId;
-      }
-    }
+      // 2. Validações se tiver appointmentId
+      if (dto.appointmentId) {
+        // Verificar se já existe transação para este appointment
+        const existing = await tx.transaction.findUnique({
+          where: { appointmentId: dto.appointmentId },
+        });
 
-    // 3. Validação de categoryId (se for despesa)
-    if (dto.type === TransactionType.EXPENSE && dto.categoryId) {
-      const category = await this.prisma.client.expenseCategory.findFirst({
-        where: {
-          id: dto.categoryId,
-          tenantId,
-          isActive: true,
-        },
+        if (existing) {
+          throw new BadRequestException('Este agendamento já foi faturado.');
+        }
+
+        // Verificar se o appointment existe e pertence ao tenant
+        const appointment = await tx.appointment.findUnique({
+          where: { id: dto.appointmentId },
+        });
+
+        if (!appointment || appointment.tenantId !== tenantId) {
+          throw new NotFoundException('Agendamento não encontrado ou não pertence a este tenant.');
+        }
+
+        // Verificar se o agendamento não está cancelado
+        if (appointment.status === 'CANCELED' || appointment.status === 'canceled') {
+          throw new BadRequestException('Não é possível faturar um agendamento cancelado.');
+        }
+
+        console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
+          appointmentId: appointment.id,
+          appointmentStaffId: appointment.staffId,
+          dtoStaffId: dto.staffId,
+          staffIdsMatch: appointment.staffId === dto.staffId,
+        });
+
+        // Se não foi passado staffId, usar o do appointment
+        // IMPORTANTE: Sempre usar o staffId do appointment para garantir consistência
+        if (appointment.staffId) {
+          if (dto.staffId && dto.staffId !== appointment.staffId) {
+            console.warn(`[FinanceService.createTransaction] DEBUG - staffId do DTO (${dto.staffId}) difere do appointment (${appointment.staffId}). Usando o do appointment.`);
+          }
+          dto.staffId = appointment.staffId;
+          console.log(`[FinanceService.createTransaction] DEBUG - staffId definido como: ${dto.staffId} (do appointment)`);
+        } else if (!dto.staffId) {
+          console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${appointment.id} não possui staffId e DTO também não tem. Repasse não será criado.`);
+        }
+
+        // Se não foi passado patientId, usar o do appointment
+        if (!dto.patientId && appointment.patientId) {
+          dto.patientId = appointment.patientId;
+        }
+      }
+
+      // 3. Validação de categoryId (se for despesa)
+      if (dto.type === TransactionType.EXPENSE && dto.categoryId) {
+        const category = await tx.expenseCategory.findFirst({
+          where: {
+            id: dto.categoryId,
+            tenantId,
+            isActive: true,
+          },
+        });
+
+        if (!category) {
+          throw new NotFoundException('Categoria de despesa não encontrada ou inativa.');
+        }
+      }
+
+      console.log(`[FinanceService] Criando transação:`, {
+        type: dto.type,
+        amount: dto.amount,
+        description: dto.description,
+        appointmentId: dto.appointmentId,
+        categoryId: dto.categoryId,
       });
 
-      if (!category) {
-        throw new NotFoundException('Categoria de despesa não encontrada ou inativa.');
-      }
-    }
-
-    console.log(`[FinanceService] Criando transação:`, {
-      type: dto.type,
-      amount: dto.amount,
-      description: dto.description,
-      appointmentId: dto.appointmentId,
-      categoryId: dto.categoryId,
-    });
-
-    // Usar transação atômica para criar transação e atualizar appointment (se necessário)
-    const transaction = await this.prisma.client.$transaction(async (tx) => {
-      // Criar transação dentro da transação
-      const newTransaction = await tx.transaction.create({
+      // Criar transação dentro da transação com contexto de tenant
+      const transaction = await tx.transaction.create({
         data: {
           ...dto,
           tenantId,
@@ -150,233 +154,206 @@ export class FinanceService {
         }
       }
 
-      return newTransaction;
-    });
+      console.log(`[FinanceService] Transação criada:`, {
+        id: transaction.id,
+        description: transaction.description,
+        appointment: transaction.appointment ? {
+          id: transaction.appointment.id,
+          patient: transaction.appointment.patient?.name,
+        } : null,
+      });
 
-    console.log(`[FinanceService] Transação criada:`, {
-      id: transaction.id,
-      description: transaction.description,
-      appointment: transaction.appointment ? {
-        id: transaction.appointment.id,
-        patient: transaction.appointment.patient?.name,
-      } : null,
-    });
+      // Lógica de Repasse Médico (M1-07) - dentro da mesma transação
+      // Se for uma entrada de consulta e tiver um médico vinculado
+      console.log(`[FinanceService.createTransaction] DEBUG - Iniciando verificação de repasse:`, {
+        type: dto.type,
+        staffId: dto.staffId,
+        appointmentId: dto.appointmentId,
+        amount: dto.amount,
+        description: dto.description,
+      });
 
-    // Atualizar status do appointment para "AGUARDANDO" (confirmed) quando pagamento é efetuado
-    if (dto.appointmentId && dto.type === TransactionType.INCOME) {
-      try {
-        await this.prisma.client.appointment.update({
-          where: { id: dto.appointmentId },
-          data: { status: 'confirmed' },
-        });
-      } catch (error) {
-        // Log do erro mas não falha a criação da transação
-        console.error(`Erro ao atualizar status do appointment ${dto.appointmentId}:`, error);
-      }
-    }
-
-    // Lógica de Repasse Médico (M1-07)
-    // Se for uma entrada de consulta e tiver um médico vinculado
-    console.log(`[FinanceService.createTransaction] DEBUG - Iniciando verificação de repasse:`, {
-      type: dto.type,
-      staffId: dto.staffId,
-      appointmentId: dto.appointmentId,
-      amount: dto.amount,
-      description: dto.description,
-    });
-
-    if (dto.type === TransactionType.INCOME && dto.staffId) {
-      console.log(`[FinanceService.createTransaction] DEBUG - Condição atendida: INCOME com staffId`);
-      
-      // Declarar appointmentWithRecord fora do bloco para uso posterior
-      let appointmentWithRecord: any = null;
-      
-      // Se tiver appointmentId, verificar se o prontuário está finalizado
-      if (dto.appointmentId) {
-        console.log(`[FinanceService.createTransaction] DEBUG - Buscando appointment com medicalRecord: ${dto.appointmentId}`);
-        appointmentWithRecord = await this.prisma.client.appointment.findUnique({
-          where: { id: dto.appointmentId },
-          include: { 
-            medicalRecord: { 
-              select: { 
-                id: true, 
-                isFinalized: true 
-              } 
-            },
-            staff: {
-              select: {
-                id: true,
-                name: true,
-                commissionRate: true,
-                fixedCommission: true,
-                commissionType: true,
-                role: true,
+      if (dto.type === TransactionType.INCOME && dto.staffId) {
+        console.log(`[FinanceService.createTransaction] DEBUG - Condição atendida: INCOME com staffId`);
+        
+        // Declarar appointmentWithRecord para uso posterior
+        let appointmentWithRecord: any = null;
+        
+        // Se tiver appointmentId, verificar se o prontuário está finalizado
+        if (dto.appointmentId) {
+          console.log(`[FinanceService.createTransaction] DEBUG - Buscando appointment com medicalRecord: ${dto.appointmentId}`);
+          appointmentWithRecord = await tx.appointment.findUnique({
+            where: { id: dto.appointmentId },
+            include: { 
+              medicalRecord: { 
+                select: { 
+                  id: true, 
+                  isFinalized: true 
+                } 
+              },
+              staff: {
+                select: {
+                  id: true,
+                  name: true,
+                  commissionRate: true,
+                  fixedCommission: true,
+                  commissionType: true,
+                  role: true,
+                },
               },
             },
+          });
+
+          console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
+            appointmentId: appointmentWithRecord?.id,
+            appointmentStaffId: appointmentWithRecord?.staffId,
+            appointmentStaffName: appointmentWithRecord?.staff?.name,
+            appointmentStaffCommissionRate: appointmentWithRecord?.staff?.commissionRate,
+            hasMedicalRecord: !!appointmentWithRecord?.medicalRecord,
+            medicalRecordId: appointmentWithRecord?.medicalRecord?.id,
+            isFinalized: appointmentWithRecord?.medicalRecord?.isFinalized,
+            dtoStaffId: dto.staffId,
+            staffIdsMatch: appointmentWithRecord?.staffId === dto.staffId,
+          });
+
+          if (appointmentWithRecord?.medicalRecord && !appointmentWithRecord.medicalRecord.isFinalized) {
+            console.warn(`[FinanceService.createTransaction] DEBUG - Prontuário não finalizado. Bloqueando criação de repasse.`);
+            throw new BadRequestException('Não é possível gerar repasse para atendimento com prontuário não finalizado.');
+          }
+
+          if (!appointmentWithRecord?.medicalRecord) {
+            console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${dto.appointmentId} não possui prontuário. Repasse não será criado agora (será criado retroativamente quando o prontuário for finalizado).`);
+          }
+
+          // Se o appointment tem staffId diferente do dto.staffId, usar o do appointment
+          if (appointmentWithRecord?.staffId && appointmentWithRecord.staffId !== dto.staffId) {
+            console.log(`[FinanceService.createTransaction] DEBUG - Corrigindo staffId: dto.staffId=${dto.staffId}, appointment.staffId=${appointmentWithRecord.staffId}`);
+            dto.staffId = appointmentWithRecord.staffId;
+          }
+        }
+        
+        console.log(`[FinanceService.createTransaction] DEBUG - Buscando médico com staffId: ${dto.staffId}`);
+        const doctor = await tx.staff.findUnique({
+          where: { id: dto.staffId },
+          select: {
+            id: true,
+            name: true,
+            commissionRate: true,
+            fixedCommission: true,
+            commissionType: true,
+            role: true,
           },
         });
 
-        console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
-          appointmentId: appointmentWithRecord?.id,
-          appointmentStaffId: appointmentWithRecord?.staffId,
-          appointmentStaffName: appointmentWithRecord?.staff?.name,
-          appointmentStaffCommissionRate: appointmentWithRecord?.staff?.commissionRate,
-          hasMedicalRecord: !!appointmentWithRecord?.medicalRecord,
-          medicalRecordId: appointmentWithRecord?.medicalRecord?.id,
-          isFinalized: appointmentWithRecord?.medicalRecord?.isFinalized,
-          dtoStaffId: dto.staffId,
-          staffIdsMatch: appointmentWithRecord?.staffId === dto.staffId,
+        console.log(`[FinanceService.createTransaction] DEBUG - Médico encontrado:`, {
+          id: doctor?.id,
+          name: doctor?.name,
+          commissionType: doctor?.commissionType,
+          commissionRate: doctor?.commissionRate,
+          fixedCommission: doctor?.fixedCommission,
+          role: doctor?.role,
         });
 
-        if (appointmentWithRecord?.medicalRecord && !appointmentWithRecord.medicalRecord.isFinalized) {
-          console.warn(`[FinanceService.createTransaction] DEBUG - Prontuário não finalizado. Bloqueando criação de repasse.`);
-          throw new BadRequestException('Não é possível gerar repasse para atendimento com prontuário não finalizado.');
-        }
-
-        if (!appointmentWithRecord?.medicalRecord) {
-          console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${dto.appointmentId} não possui prontuário. Repasse não será criado agora (será criado retroativamente quando o prontuário for finalizado).`);
-          // Não criar repasse se não houver prontuário (será criado retroativamente quando finalizar)
-          // MAS continuar o fluxo para garantir que o staffId está correto e logar informações
-          console.log(`[FinanceService.createTransaction] DEBUG - Continuando fluxo para validar staffId e configurações, mas não criando repasse ainda.`);
-        }
-
-        // Se o appointment tem staffId diferente do dto.staffId, usar o do appointment
-        if (appointmentWithRecord?.staffId && appointmentWithRecord.staffId !== dto.staffId) {
-          console.log(`[FinanceService.createTransaction] DEBUG - Corrigindo staffId: dto.staffId=${dto.staffId}, appointment.staffId=${appointmentWithRecord.staffId}`);
-          dto.staffId = appointmentWithRecord.staffId;
-        }
-      }
-      
-      console.log(`[FinanceService.createTransaction] DEBUG - Buscando médico com staffId: ${dto.staffId}`);
-      const doctor = await this.prisma.client.staff.findUnique({
-        where: { id: dto.staffId },
-        select: {
-          id: true,
-          name: true,
-          commissionRate: true,
-          fixedCommission: true,
-          commissionType: true,
-          role: true,
-        },
-      });
-
-      console.log(`[FinanceService.createTransaction] DEBUG - Médico encontrado:`, {
-        id: doctor?.id,
-        name: doctor?.name,
-        commissionType: doctor?.commissionType,
-        commissionRate: doctor?.commissionRate,
-        fixedCommission: doctor?.fixedCommission,
-        role: doctor?.role,
-      });
-
-      if (!doctor) {
-        console.error(`[FinanceService.createTransaction] DEBUG - ERRO: Médico não encontrado com staffId: ${dto.staffId}`);
-      } else {
-        // Verificar se tem configuração de repasse válida
-        const isPercentage = doctor.commissionType === 'PERCENTAGE';
-        const isFixed = doctor.commissionType === 'FIXED';
-        
-        let feeAmount: number | null = null;
-        let commissionRate: number | null = null;
-        let fixedCommission: number | null = null;
-
-        if (isPercentage) {
-          if (!doctor.commissionRate || Number(doctor.commissionRate) <= 0) {
-            console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate})`);
-          } else {
-            commissionRate = Number(doctor.commissionRate);
-            const grossAmount = Number(dto.amount);
-            feeAmount = (grossAmount * commissionRate) / 100;
-          }
-        } else if (isFixed) {
-          if (!doctor.fixedCommission || Number(doctor.fixedCommission) <= 0) {
-            console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo FIXED mas sem fixedCommission ou fixedCommission = 0 (valor: ${doctor.fixedCommission})`);
-          } else {
-            fixedCommission = Number(doctor.fixedCommission);
-            feeAmount = fixedCommission; // Valor fixo é o próprio feeAmount
-            commissionRate = null; // Não usa percentual
-          }
+        if (!doctor) {
+          console.error(`[FinanceService.createTransaction] DEBUG - ERRO: Médico não encontrado com staffId: ${dto.staffId}`);
         } else {
-          console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}`);
-        }
+          // Verificar se tem configuração de repasse válida
+          const isPercentage = doctor.commissionType === 'PERCENTAGE';
+          const isFixed = doctor.commissionType === 'FIXED';
+          
+          let feeAmount: number | null = null;
+          let commissionRate: number | null = null;
+          let fixedCommission: number | null = null;
 
-        // Só criar repasse se tiver feeAmount válido E (não tiver appointmentId OU tiver appointmentId com prontuário finalizado)
-        const shouldCreateFee = feeAmount !== null && feeAmount > 0 && 
-          (!dto.appointmentId || (appointmentWithRecord?.medicalRecord?.isFinalized === true));
+          if (isPercentage) {
+            if (!doctor.commissionRate || Number(doctor.commissionRate) <= 0) {
+              console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate})`);
+            } else {
+              commissionRate = Number(doctor.commissionRate);
+              const grossAmount = Number(dto.amount);
+              feeAmount = (grossAmount * commissionRate) / 100;
+            }
+          } else if (isFixed) {
+            if (!doctor.fixedCommission || Number(doctor.fixedCommission) <= 0) {
+              console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo FIXED mas sem fixedCommission ou fixedCommission = 0 (valor: ${doctor.fixedCommission})`);
+            } else {
+              fixedCommission = Number(doctor.fixedCommission);
+              feeAmount = fixedCommission; // Valor fixo é o próprio feeAmount
+              commissionRate = null; // Não usa percentual
+            }
+          } else {
+            console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}`);
+          }
 
-        if (shouldCreateFee) {
-          const grossAmount = Number(dto.amount);
+          // Só criar repasse se tiver feeAmount válido E (não tiver appointmentId OU tiver appointmentId com prontuário finalizado)
+          const shouldCreateFee = feeAmount !== null && feeAmount > 0 && 
+            (!dto.appointmentId || (appointmentWithRecord?.medicalRecord?.isFinalized === true));
 
-          console.log(`[FinanceService.createTransaction] DEBUG - Criando repasse médico:`, {
-            tenantId,
-            staffId: dto.staffId,
-            staffName: doctor.name,
-            commissionType: doctor.commissionType,
-            grossAmount,
-            commissionRate,
-            fixedCommission,
-            feeAmount,
-            appointmentId: dto.appointmentId,
-            hasAppointment: !!dto.appointmentId,
-            hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
-          });
+          if (shouldCreateFee) {
+            const grossAmount = Number(dto.amount);
 
-          try {
-            // commissionRate é obrigatório no Prisma, usar 0 para tipo FIXED
-            const medicalFeeData = {
+            console.log(`[FinanceService.createTransaction] DEBUG - Criando repasse médico:`, {
               tenantId,
-              staffId: dto.staffId as string, // staffId já foi validado acima
-              transactionId: transaction.id,
-              grossAmount,
-              feeAmount: feeAmount as number,
-              status: 'pending' as const,
-              commissionRate: commissionRate ?? 0, // 0 para FIXED, valor real para PERCENTAGE
-            };
-            
-            console.log(`[FinanceService.createTransaction] 📝 Dados para criar medicalFee:`, medicalFeeData);
-            
-            const medicalFee = await this.prisma.client.medicalFee.create({
-              data: medicalFeeData,
-            });
-
-            console.log(`[FinanceService.createTransaction] DEBUG - ✅ Repasse médico criado com SUCESSO:`, {
-              id: medicalFee.id,
-              status: medicalFee.status,
-              staffId: medicalFee.staffId,
+              staffId: dto.staffId,
               staffName: doctor.name,
               commissionType: doctor.commissionType,
-              feeAmount: medicalFee.feeAmount,
-              grossAmount: medicalFee.grossAmount,
-              commissionRate: medicalFee.commissionRate,
+              grossAmount,
+              commissionRate,
+              fixedCommission,
+              feeAmount,
+              appointmentId: dto.appointmentId,
+              hasAppointment: !!dto.appointmentId,
+              hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
             });
-          } catch (error) {
-            console.error(`[FinanceService.createTransaction] DEBUG - ❌ ERRO ao criar repasse:`, error);
-            throw error;
-          }
-        } else {
-          console.log(`[FinanceService.createTransaction] DEBUG - ⚠️ Repasse NÃO criado. Motivo:`, {
-            hasFeeAmount: feeAmount !== null && feeAmount > 0,
-            hasAppointmentId: !!dto.appointmentId,
-            hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
-            shouldCreate: shouldCreateFee,
-            reason: !(feeAmount !== null && feeAmount > 0) 
-              ? 'feeAmount inválido' 
-              : dto.appointmentId && !appointmentWithRecord?.medicalRecord?.isFinalized
-              ? 'prontuário não finalizado'
-              : 'desconhecido',
-          });
-        }
-      }
-    } else {
-      console.log(`[FinanceService.createTransaction] DEBUG - Repasse NÃO verificado:`, {
-        reason: !dto.staffId ? 'sem staffId' : dto.type !== TransactionType.INCOME ? 'não é INCOME' : 'desconhecido',
-        type: dto.type,
-        staffId: dto.staffId,
-      });
-    }
 
-    console.log(`[FinanceService.createTransaction] DEBUG - Finalizando createTransaction. Retornando transação.`);
-    return transaction;
+            try {
+              // Criar repasse médico dentro da mesma transação
+              const medicalFee = await tx.medicalFee.create({
+                data: {
+                  tenantId,
+                  staffId: dto.staffId as string,
+                  transactionId: transaction.id,
+                  grossAmount,
+                  feeAmount: feeAmount as number,
+                  status: 'pending',
+                  commissionRate: commissionRate ?? 0, // 0 para FIXED, valor real para PERCENTAGE
+                },
+              });
+
+              console.log(`[FinanceService.createTransaction] DEBUG - ✅ Repasse médico criado com SUCESSO:`, {
+                id: medicalFee.id,
+                status: medicalFee.status,
+                staffId: medicalFee.staffId,
+                staffName: doctor.name,
+                commissionType: doctor.commissionType,
+                feeAmount: medicalFee.feeAmount,
+                grossAmount: medicalFee.grossAmount,
+                commissionRate: medicalFee.commissionRate,
+              });
+            } catch (error) {
+              console.error(`[FinanceService.createTransaction] DEBUG - ❌ ERRO ao criar repasse:`, error);
+              throw error;
+            }
+          } else {
+            console.log(`[FinanceService.createTransaction] DEBUG - ⚠️ Repasse NÃO criado. Motivo:`, {
+              hasFeeAmount: feeAmount !== null && feeAmount > 0,
+              hasAppointmentId: !!dto.appointmentId,
+              hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
+              shouldCreate: shouldCreateFee,
+            });
+          }
+        }
+      } else {
+        console.log(`[FinanceService.createTransaction] DEBUG - Repasse NÃO verificado:`, {
+          reason: !dto.staffId ? 'sem staffId' : dto.type !== TransactionType.INCOME ? 'não é INCOME' : 'desconhecido',
+          type: dto.type,
+          staffId: dto.staffId,
+        });
+      }
+
+      console.log(`[FinanceService.createTransaction] DEBUG - Finalizando createTransaction. Retornando transação.`);
+      return transaction;
+    });
   }
 
   async getMedicalFees(tenantId: string, doctorId?: string, startDate?: string, endDate?: string, status?: string) {
