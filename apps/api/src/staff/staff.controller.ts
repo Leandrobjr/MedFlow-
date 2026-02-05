@@ -55,5 +55,3 @@ export class StaffController {
     return this.staffService.getProcedures(req.tenantId, id);
   }
 }
-
-

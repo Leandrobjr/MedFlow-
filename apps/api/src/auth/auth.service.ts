@@ -1,123 +1,111 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { TenantContextService } from '../common/tenant/tenant-context.service';
-import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt';
-import { UserRole } from '../common/shared-types';
+
+type SafeUserForToken = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  tenantId: string | null;
+};
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
+    private readonly tenantPrisma: TenantPrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  async login(loginDto: LoginDto) {
-    // Obter tenantId do contexto (setado pelo TenantMiddleware)
+  async validateUser(email: string, password: string) {
     const tenantId = this.tenantContext.getTenantId();
-    
-    if (!tenantId) {
-      console.error(`[AUTH] ❌ Tenant não resolvido para login de ${loginDto.email}`);
-      throw new UnauthorizedException('Tenant não identificado. Verifique o header x-tenant-slug.');
-    }
-
-    console.log(`[AUTH] Tentando login para ${loginDto.email} | Tenant: ${tenantId}`);
-    
-    // Usar withTenant para garantir que o RLS funcione corretamente
-    const user = await this.prisma.withTenant(tenantId, async (tx) => {
-      return tx.user.findUnique({
-        where: { email: loginDto.email },
-      });
-    });
-
-    console.log(`[AUTH] Usuário encontrado: ${user ? `SIM (tenantId: ${user.tenantId})` : 'NÃO'}`);
+    this.logger.debug(
+      `[AUTH] Tentando validar usuário ${email} | tenantId=${tenantId ?? 'null'}`,
+    );
+    const user = await this.tenantPrisma.run((tx) =>
+      tx.user.findUnique({
+        where: { email },
+        include: { tenant: true },
+      }),
+    );
 
     if (!user) {
-      console.log(`[AUTH] ❌ Usuário não encontrado para ${loginDto.email} no tenant ${tenantId}`);
-      throw new UnauthorizedException('E-mail ou senha incorretos');
+      this.logger.warn(
+        `[AUTH] Usuário não encontrado para ${email} | tenantId=${tenantId ?? 'null'}`,
+      );
+      throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    // Verificar se o usuário pertence ao tenant correto (segurança adicional)
-    if (user.tenantId !== tenantId) {
-      console.error(`[AUTH] ❌ Tentativa de login com tenant incorreto. Usuário pertence a ${user.tenantId}, mas requisição veio de ${tenantId}`);
-      throw new UnauthorizedException('E-mail ou senha incorretos');
+    // bcryptjs já existe no repo
+    const bcrypt = await import('bcryptjs');
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) {
+      this.logger.warn(
+        `[AUTH] Senha inválida para ${email} | tenantId=${tenantId ?? 'null'}`,
+      );
+      throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    // Verificar senha
-    if (!(await bcrypt.compare(loginDto.password, user.password))) {
-      console.log(`[AUTH] ❌ Senha incorreta para ${loginDto.email}`);
-      throw new UnauthorizedException('E-mail ou senha incorretos');
+    return user;
+  }
+
+  private getAccessTokenExpiresIn(): JwtSignOptions['expiresIn'] {
+    return (process.env.JWT_EXPIRES_IN ?? '15m') as JwtSignOptions['expiresIn'];
+  }
+
+  private getAccessTokenSecret(): string {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET não definido');
     }
+    return secret;
+  }
 
-    console.log(`[AUTH] ✅ Autenticação bem-sucedida para ${loginDto.email} (tenantId: ${user.tenantId})`);
+  private getRefreshTokenExpiresIn(): JwtSignOptions['expiresIn'] {
+    return (process.env.JWT_REFRESH_EXPIRES_IN ?? '30d') as JwtSignOptions['expiresIn'];
+  }
 
-    // Buscar staffId se o usuário tiver um Staff vinculado (dentro do contexto de tenant)
-    const staff = await this.prisma.withTenant(tenantId, async (tx) => {
-      return tx.staff.findUnique({
-        where: { userId: user.id },
-        select: { id: true },
-      });
-    });
+  private getRefreshTokenSecret(): string {
+    const secret = process.env.JWT_REFRESH_SECRET;
+    if (!secret) {
+      throw new Error('JWT_REFRESH_SECRET não definido');
+    }
+    return secret;
+  }
 
-    const payload = {
+  async signAccessToken(user: SafeUserForToken): Promise<string> {
+    const payload: Record<string, unknown> = {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as UserRole,
+      role: user.role,
       tenantId: user.tenantId,
-      staffId: staff?.id || undefined,
     };
 
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'medflow_segredo_super_seguro_123',
-      expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
-    });
-
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'medflow_refresh_segredo_extra_456',
-      expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN as any) || '7d',
-    });
-
-    return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
+    const options: JwtSignOptions = {
+      expiresIn: this.getAccessTokenExpiresIn(),
+      secret: this.getAccessTokenSecret(),
     };
+    return this.jwtService.signAsync(payload, options);
   }
 
-  async refreshToken(token: string) {
-    try {
-      const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_REFRESH_SECRET || 'medflow_refresh_segredo_extra_456',
-      });
+  async signRefreshToken(user: Pick<SafeUserForToken, 'id' | 'tenantId'>): Promise<string> {
+    const payload: Record<string, unknown> = {
+      sub: user.id,
+      tenantId: user.tenantId,
+      type: 'refresh',
+    };
 
-      const newAccessToken = await this.jwtService.signAsync(
-        {
-          sub: payload.sub,
-          email: payload.email,
-          name: payload.name,
-          role: payload.role,
-          tenantId: payload.tenantId,
-          staffId: payload.staffId,
-        },
-        {
-          secret: process.env.JWT_SECRET || 'medflow_segredo_super_seguro_123',
-          expiresIn: (process.env.JWT_EXPIRES_IN as any) || '15m',
-        },
-      );
-
-      return { accessToken: newAccessToken };
-    } catch {
-      throw new UnauthorizedException('Token de atualização inválido');
-    }
+    const options: JwtSignOptions = {
+      expiresIn: this.getRefreshTokenExpiresIn(),
+      secret: this.getRefreshTokenSecret(),
+    };
+    return this.jwtService.signAsync(payload, options);
   }
 }
-
-

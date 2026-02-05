@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
   Req,
 } from '@nestjs/common';
 import { ExpenseCategoriesService } from './expense-categories.service';
@@ -17,7 +16,9 @@ import { UserRole } from '../common/shared-types';
 
 @Controller('expense-categories')
 export class ExpenseCategoriesController {
-  constructor(private readonly expenseCategoriesService: ExpenseCategoriesService) {}
+  constructor(
+    private readonly expenseCategoriesService: ExpenseCategoriesService,
+  ) {}
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.OWNER)
@@ -27,11 +28,14 @@ export class ExpenseCategoriesController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
-  findAll(@Req() req: any, @Query('includeInactive') includeInactive?: string) {
-    return this.expenseCategoriesService.findAll(
-      req.tenantId,
-      includeInactive === 'true'
-    );
+  findAll(@Req() req: any) {
+    return this.expenseCategoriesService.findAll(req.tenantId);
+  }
+
+  @Get('tree/hierarchical')
+  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
+  getHierarchicalTree(@Req() req: any) {
+    return this.expenseCategoriesService.findTree(req.tenantId);
   }
 
   @Get(':id')
@@ -66,14 +70,5 @@ export class ExpenseCategoriesController {
   @Roles(UserRole.ADMIN, UserRole.OWNER)
   activate(@Req() req: any, @Param('id') id: string) {
     return this.expenseCategoriesService.activate(req.tenantId, id);
-  }
-
-  @Get('tree/hierarchical')
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
-  getHierarchicalTree(@Req() req: any, @Query('includeInactive') includeInactive?: string) {
-    return this.expenseCategoriesService.getHierarchicalTree(
-      req.tenantId,
-      includeInactive === 'true'
-    );
   }
 }

@@ -1,299 +1,218 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import type { ExpenseCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { UpdateExpenseCategoryDto } from './dto/update-expense-category.dto';
+
+export type ExpenseCategoryNode = ExpenseCategory & { children: ExpenseCategoryNode[] };
 
 @Injectable()
 export class ExpenseCategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, createDto: CreateExpenseCategoryDto) {
-    // Verificar se o código já existe para este tenant
-    const existing = await this.prisma.client.expenseCategory.findUnique({
-      where: {
-        tenantId_code: {
-          tenantId,
-          code: createDto.code,
-        },
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException('Já existe uma categoria com este código.');
-    }
-
-    // Se tiver parentId, verificar se existe e pertence ao tenant
-    if (createDto.parentId) {
+  async create(tenantId: string, dto: CreateExpenseCategoryDto): Promise<ExpenseCategory> {
+    if (dto.parentId) {
       const parent = await this.prisma.client.expenseCategory.findFirst({
-        where: {
-          id: createDto.parentId,
-          tenantId,
-        },
+        where: { id: dto.parentId, tenantId },
       });
-
-      if (!parent) {
-        throw new NotFoundException('Categoria pai não encontrada.');
-      }
+      if (!parent) throw new NotFoundException('Categoria pai não encontrada');
     }
+
+    const code = dto.code ?? (await this.generateNextCode(tenantId, dto.parentId ?? null));
+
+    const exists = await this.prisma.client.expenseCategory.findFirst({
+      where: { tenantId, code },
+      select: { id: true },
+    });
+    if (exists) throw new BadRequestException('Código já existe neste tenant');
 
     return this.prisma.client.expenseCategory.create({
       data: {
-        ...createDto,
         tenantId,
+        parentId: dto.parentId ?? null,
+        name: dto.name,
+        code,
+        description: dto.description ?? null,
         isActive: true,
-      },
-      include: {
-        parent: { select: { id: true, name: true, code: true } },
-        children: { select: { id: true, name: true, code: true } },
+        isFixed: dto.isFixed ?? false,
+        costCenter: dto.costCenter ?? null,
       },
     });
   }
 
-  async findAll(tenantId: string, includeInactive: boolean = false) {
-    const where: any = { tenantId };
-    
-    if (!includeInactive) {
-      where.isActive = true;
-    }
-
+  async findAll(tenantId: string): Promise<ExpenseCategory[]> {
     return this.prisma.client.expenseCategory.findMany({
-      where,
-      include: {
-        parent: { select: { id: true, name: true, code: true } },
-        children: { 
-          select: { id: true, name: true, code: true, isActive: true },
-          where: includeInactive ? {} : { isActive: true },
-        },
-        _count: {
-          select: {
-            transactions: true,
-          },
-        },
-      },
-      orderBy: [
-        { parentId: 'asc' },
-        { code: 'asc' },
-      ],
+      where: { tenantId },
+      orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findTree(tenantId: string): Promise<ExpenseCategoryNode[]> {
+    const categories = await this.findAll(tenantId);
+    return this.buildTree(categories);
+  }
+
+  async findOne(tenantId: string, id: string): Promise<ExpenseCategory> {
     const category = await this.prisma.client.expenseCategory.findFirst({
-      where: {
-        id,
-        tenantId,
-      },
-      include: {
-        parent: { select: { id: true, name: true, code: true } },
-        children: { 
-          select: { id: true, name: true, code: true, isActive: true },
-        },
-        _count: {
-          select: {
-            transactions: true,
-          },
-        },
-      },
+      where: { id, tenantId },
     });
 
-    if (!category) {
-      throw new NotFoundException('Categoria não encontrada.');
-    }
-
+    if (!category) throw new NotFoundException('Categoria não encontrada');
     return category;
   }
 
-  async update(tenantId: string, id: string, updateDto: UpdateExpenseCategoryDto) {
-    // Verificar se a categoria existe
+  async update(
+    tenantId: string,
+    id: string,
+    updateDto: UpdateExpenseCategoryDto,
+  ): Promise<ExpenseCategory> {
     const category = await this.findOne(tenantId, id);
 
-    // Se estiver atualizando o código, verificar se não existe outra com o mesmo código
-    if (updateDto.code && updateDto.code !== category.code) {
-      const existing = await this.prisma.client.expenseCategory.findUnique({
-        where: {
-          tenantId_code: {
-            tenantId,
-            code: updateDto.code,
-          },
-        },
-      });
-
-      if (existing) {
-        throw new ConflictException('Já existe uma categoria com este código.');
-      }
-    }
-
-    // Se estiver atualizando o parentId, verificar se não está criando um ciclo
-    if (updateDto.parentId) {
+    if (updateDto.parentId !== undefined) {
       if (updateDto.parentId === id) {
-        throw new BadRequestException('Uma categoria não pode ser pai de si mesma.');
+        throw new BadRequestException('Uma categoria não pode ser pai de si mesma');
       }
 
-      // Verificar se o parentId não é um descendente desta categoria
-      const isDescendant = await this.isDescendant(tenantId, updateDto.parentId, id);
-      if (isDescendant) {
-        throw new BadRequestException('Não é possível criar uma hierarquia circular.');
-      }
-
-      // Verificar se o parent existe
-      const parent = await this.prisma.client.expenseCategory.findFirst({
-        where: {
-          id: updateDto.parentId,
-          tenantId,
-        },
-      });
-
-      if (!parent) {
-        throw new NotFoundException('Categoria pai não encontrada.');
+      if (updateDto.parentId) {
+        const parent = await this.findOne(tenantId, updateDto.parentId);
+        const children = await this.getAllChildren(tenantId, id);
+        if (children.some((c) => c.id === parent.id)) {
+          throw new BadRequestException('Não é permitido criar ciclo na árvore');
+        }
       }
     }
 
+    if (updateDto.code !== undefined && updateDto.code !== category.code) {
+      const exists = await this.prisma.client.expenseCategory.findFirst({
+        where: { tenantId, code: updateDto.code! },
+        select: { id: true },
+      });
+      if (exists) throw new BadRequestException('Código já existe neste tenant');
+    }
+
     return this.prisma.client.expenseCategory.update({
-      where: { id },
-      data: updateDto,
-      include: {
-        parent: { select: { id: true, name: true, code: true } },
-        children: { select: { id: true, name: true, code: true, isActive: true } },
+      where: { id: category.id },
+      data: {
+        parentId: updateDto.parentId !== undefined ? updateDto.parentId : category.parentId,
+        name: updateDto.name ?? category.name,
+        code: updateDto.code ?? category.code,
+        description: updateDto.description !== undefined ? updateDto.description : category.description,
+        isActive: updateDto.isActive ?? category.isActive,
+        isFixed: updateDto.isFixed ?? category.isFixed,
+        costCenter: updateDto.costCenter ?? category.costCenter,
       },
     });
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(tenantId: string, id: string): Promise<void> {
     const category = await this.findOne(tenantId, id);
 
-    // Verificar se há transações usando esta categoria
-    const transactionCount = await this.prisma.client.transaction.count({
-      where: {
-        categoryId: id,
-      },
+    const hasChildren = await this.prisma.client.expenseCategory.findFirst({
+      where: { tenantId, parentId: category.id },
+      select: { id: true },
     });
 
-    if (transactionCount > 0) {
-      throw new BadRequestException(
-        `Não é possível excluir esta categoria pois existem ${transactionCount} transação(ões) vinculada(s) a ela.`
-      );
+    if (hasChildren) {
+      throw new BadRequestException('Não é permitido excluir categoria com subcategorias');
     }
 
-    // Verificar se há categorias filhas
-    const childrenCount = await this.prisma.client.expenseCategory.count({
-      where: {
-        parentId: id,
-      },
-    });
-
-    if (childrenCount > 0) {
-      throw new BadRequestException(
-        `Não é possível excluir esta categoria pois existem ${childrenCount} subcategoria(s) vinculada(s) a ela.`
-      );
-    }
-
-    return this.prisma.client.expenseCategory.delete({
-      where: { id },
-    });
+    await this.prisma.client.expenseCategory.delete({ where: { id: category.id } });
   }
 
-  async deactivate(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
-
-    return this.prisma.client.expenseCategory.update({
-      where: { id },
-      data: { isActive: false },
-    });
+  async deactivate(tenantId: string, id: string): Promise<ExpenseCategory> {
+    return this.update(tenantId, id, { isActive: false });
   }
 
-  async activate(tenantId: string, id: string) {
-    await this.findOne(tenantId, id);
-
-    return this.prisma.client.expenseCategory.update({
-      where: { id },
-      data: { isActive: true },
-    });
+  async activate(tenantId: string, id: string): Promise<ExpenseCategory> {
+    return this.update(tenantId, id, { isActive: true });
   }
 
-  // Método auxiliar para verificar se uma categoria é descendente de outra
-  private async isDescendant(tenantId: string, potentialDescendantId: string, ancestorId: string): Promise<boolean> {
-    let currentId: string | null = potentialDescendantId;
+  private buildTree(categories: ExpenseCategory[]): ExpenseCategoryNode[] {
+    const map = new Map<string, ExpenseCategoryNode>();
+    const roots: ExpenseCategoryNode[] = [];
 
-    // Limitar a profundidade para evitar loops infinitos
-    let depth = 0;
-    const maxDepth = 10;
+    categories.forEach((c) => map.set(c.id, { ...c, children: [] }));
 
-    while (currentId && depth < maxDepth) {
-      if (currentId === ancestorId) {
-        return true;
+    map.forEach((node) => {
+      if (!node.parentId) roots.push(node);
+      else {
+        const parent = map.get(node.parentId);
+        if (parent) parent.children.push(node);
+        else roots.push(node);
       }
-
-      const category: { parentId: string | null } | null = await this.prisma.client.expenseCategory.findFirst({
-        where: {
-          id: currentId,
-          tenantId,
-        },
-        select: { parentId: true },
-      });
-
-      currentId = category?.parentId || null;
-      depth++;
-    }
-
-    return false;
-  }
-
-  async getHierarchicalTree(tenantId: string, includeInactive: boolean = false) {
-    const where: any = { tenantId, parentId: null };
-    
-    if (!includeInactive) {
-      where.isActive = true;
-    }
-
-    const rootCategories = await this.prisma.client.expenseCategory.findMany({
-      where,
-      include: {
-        children: {
-          where: includeInactive ? {} : { isActive: true },
-          orderBy: { code: 'asc' },
-        },
-        _count: {
-          select: {
-            transactions: true,
-          },
-        },
-      },
-      orderBy: { code: 'asc' },
     });
 
-    // Função recursiva para buscar filhos
-    const buildTree = async (parentId: string | null): Promise<any[]> => {
-      const where: any = { tenantId, parentId };
-      if (!includeInactive) {
-        where.isActive = true;
-      }
-
-      const children = await this.prisma.client.expenseCategory.findMany({
-        where,
-        include: {
-          _count: {
-            select: {
-              transactions: true,
-            },
-          },
-        },
-        orderBy: { code: 'asc' },
-      });
-
-      return Promise.all(
-        children.map(async (child) => ({
-          ...child,
-          children: await buildTree(child.id),
-        }))
+    const sortRecursive = (n: ExpenseCategoryNode) => {
+      n.children.sort(
+        (a, b) => (a.code ?? '').localeCompare(b.code ?? '') || a.name.localeCompare(b.name),
       );
+      n.children.forEach(sortRecursive);
     };
 
-    // Construir árvore completa
-    return Promise.all(
-      rootCategories.map(async (root) => ({
-        ...root,
-        children: await buildTree(root.id),
-      }))
-    );
+    roots.sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '') || a.name.localeCompare(b.name));
+    roots.forEach(sortRecursive);
+
+    return roots;
+  }
+
+  private async generateNextCode(tenantId: string, parentId: string | null): Promise<string> {
+    if (!parentId) {
+      const last = await this.prisma.client.expenseCategory.findFirst({
+        where: { tenantId, parentId: null },
+        orderBy: { code: 'desc' },
+        select: { code: true },
+      });
+      return this.nextNumericCode(last?.code);
+    }
+
+    const parent = await this.findOne(tenantId, parentId);
+
+    const lastChild = await this.prisma.client.expenseCategory.findFirst({
+      where: { tenantId, parentId },
+      orderBy: { code: 'desc' },
+      select: { code: true },
+    });
+
+    const nextSuffix = this.nextNumericSuffix(parent.code, lastChild?.code);
+    return `${parent.code}.${nextSuffix}`;
+  }
+
+  private nextNumericCode(lastCode?: string | null): string {
+    const last = lastCode ? parseInt(lastCode.replace(/\D/g, ''), 10) : 0;
+    return (last + 1).toString().padStart(3, '0');
+  }
+
+  private nextNumericSuffix(parentCode: string, lastChildCode?: string | null): string {
+    if (!lastChildCode) return '01';
+    const parts = lastChildCode.split('.');
+    const lastSuffix = parts[parts.length - 1] ?? '0';
+    const n = parseInt(lastSuffix, 10);
+    return (Number.isFinite(n) ? n + 1 : 1).toString().padStart(2, '0');
+  }
+
+  private async getAllChildren(tenantId: string, id: string): Promise<ExpenseCategory[]> {
+    const all = await this.findAll(tenantId);
+
+    const byParent = new Map<string, ExpenseCategory[]>();
+    all.forEach((c) => {
+      if (!c.parentId) return;
+      const arr = byParent.get(c.parentId) ?? [];
+      arr.push(c);
+      byParent.set(c.parentId, arr);
+    });
+
+    const out: ExpenseCategory[] = [];
+    const queue: string[] = [id];
+
+    while (queue.length) {
+      const current = queue.shift()!;
+      const children = byParent.get(current) ?? [];
+      for (const child of children) {
+        out.push(child);
+        queue.push(child.id);
+      }
+    }
+
+    return out;
   }
 }

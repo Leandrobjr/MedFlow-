@@ -8,7 +8,8 @@ const nextConfig: NextConfig = {
       return [
         {
           source: '/api/:path*',
-          destination: 'http://localhost:3001/:path*',
+          // Evita problemas do Windows com localhost -> IPv6 (::1)
+          destination: 'http://127.0.0.1:3001/:path*',
         },
       ];
     }

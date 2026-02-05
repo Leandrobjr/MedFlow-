@@ -165,7 +165,7 @@ export default function CategoriasDespesasPage() {
     return cats.flatMap(cat => [cat, ...(cat.children ? getAllCategoriesFlat(cat.children) : [])]);
   };
 
-  const renderCategoryTree = (cats: ExpenseCategory[], level: number = 0): JSX.Element[] => {
+  const renderCategoryTree = (cats: ExpenseCategory[], level: number = 0): React.ReactNode => {
     return cats.map(cat => (
       <React.Fragment key={cat.id}>
         <tr className={`hover:bg-gray-50 transition-colors ${!cat.isActive ? 'opacity-60' : ''}`}>

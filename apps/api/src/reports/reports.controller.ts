@@ -28,7 +28,10 @@ export class ReportsController {
       req.tenantId,
       closureId,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="fechamento-caixa-${closureId}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fechamento-caixa-${closureId}.pdf"`,
+    );
     res.send(pdf);
   }
 
@@ -45,7 +48,9 @@ export class ReportsController {
     @Query('patientId') patientId?: string,
   ) {
     if (!startDate || !endDate) {
-      return res.status(400).json({ message: 'startDate e endDate são obrigatórios' });
+      return res
+        .status(400)
+        .json({ message: 'startDate e endDate são obrigatórios' });
     }
 
     const pdf = await this.reportsService.generateBillingReport(
@@ -56,7 +61,10 @@ export class ReportsController {
       staffId,
       patientId,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="faturamento-${startDate}-${endDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="faturamento-${startDate}-${endDate}.pdf"`,
+    );
     res.send(pdf);
   }
 
@@ -70,7 +78,9 @@ export class ReportsController {
   ) {
     // Se for médico, verificar se o repasse é dele
     if (req.user.role === UserRole.DOCTOR && req.user.staffId) {
-      const payment = await this.reportsService['prisma'].client.medicalFeePayment.findFirst({
+      const payment = await this.reportsService[
+        'prisma'
+      ].client.medicalFeePayment.findFirst({
         where: {
           id: paymentId,
           tenantId: req.tenantId,
@@ -79,7 +89,9 @@ export class ReportsController {
       });
 
       if (!payment) {
-        return res.status(403).json({ message: 'Você não tem permissão para acessar este relatório.' });
+        return res.status(403).json({
+          message: 'Você não tem permissão para acessar este relatório.',
+        });
       }
     }
 
@@ -89,7 +101,10 @@ export class ReportsController {
       req.user?.role,
       req.user?.staffId,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="repasse-medico-${paymentId}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="repasse-medico-${paymentId}.pdf"`,
+    );
     res.send(pdf);
   }
 
@@ -104,13 +119,17 @@ export class ReportsController {
     @Query('endDate') endDate: string,
   ) {
     if (!staffId || !startDate || !endDate) {
-      return res.status(400).json({ message: 'staffId, startDate e endDate são obrigatórios' });
+      return res
+        .status(400)
+        .json({ message: 'staffId, startDate e endDate são obrigatórios' });
     }
 
     // Se for médico, só pode ver seus próprios repasses
     if (req.user.role === UserRole.DOCTOR && req.user.staffId) {
       if (staffId !== req.user.staffId) {
-        return res.status(403).json({ message: 'Você não tem permissão para acessar este relatório.' });
+        return res.status(403).json({
+          message: 'Você não tem permissão para acessar este relatório.',
+        });
       }
     }
 
@@ -120,7 +139,10 @@ export class ReportsController {
       startDate,
       endDate,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="repasse-pendente-${staffId}-${startDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="repasse-pendente-${staffId}-${startDate}.pdf"`,
+    );
     res.send(pdf);
   }
 
@@ -135,7 +157,9 @@ export class ReportsController {
     @Query('categoryId') categoryId?: string,
   ) {
     if (!startDate || !endDate) {
-      return res.status(400).json({ message: 'startDate e endDate são obrigatórios' });
+      return res
+        .status(400)
+        .json({ message: 'startDate e endDate são obrigatórios' });
     }
 
     const pdf = await this.reportsService.generateExpenseReport(
@@ -144,7 +168,10 @@ export class ReportsController {
       endDate,
       categoryId,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="saidas-${startDate}-${endDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="saidas-${startDate}-${endDate}.pdf"`,
+    );
     res.send(pdf);
   }
 
@@ -159,7 +186,9 @@ export class ReportsController {
     @Query('userId') userId?: string,
   ) {
     if (!startDate || !endDate) {
-      return res.status(400).json({ message: 'startDate e endDate são obrigatórios' });
+      return res
+        .status(400)
+        .json({ message: 'startDate e endDate são obrigatórios' });
     }
 
     // Se for recepcionista, só pode ver os próprios fechamentos
@@ -174,7 +203,10 @@ export class ReportsController {
       endDate,
       userIdToUse,
     );
-    res.setHeader('Content-Disposition', `attachment; filename="fechamentos-caixa-${startDate}-${endDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fechamentos-caixa-${startDate}-${endDate}.pdf"`,
+    );
     res.send(pdf);
   }
 }

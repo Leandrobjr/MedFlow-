@@ -1,11 +1,15 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
+import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantPrisma: TenantPrismaService,
+  ) {}
 
   async create(tenantId: string, createStaffDto: CreateStaffDto) {
     // Se solicitado criar conta de usuário, validar e-mail e senha
@@ -43,7 +47,12 @@ export class StaffService {
       userId = user.id;
     }
 
-    // Preparar dados, convertendo valores numéricos para Decimal quando necessário
+    // IDs de procedimentos (relacionamento many-to-many)
+    const procedureIds = Array.isArray((createStaffDto as any).procedureIds)
+      ? Array.from(new Set((createStaffDto as any).procedureIds))
+      : undefined;
+
+    // Preparar dados
     const data: any = {
       name: createStaffDto.name,
       email: createStaffDto.email && createStaffDto.email.trim() ? createStaffDto.email.trim() : null,
@@ -87,27 +96,31 @@ export class StaffService {
     }
 
     // Extrair procedureIds para gerenciar relacionamento
-    const { procedureIds, ...staffCreateData } = data;
+    const { ...staffCreateData } = data;
 
-    // Criar staff com ou sem relacionamento de procedimentos
-    const staff = await this.prisma.client.staff.create({
-      data: {
-        ...staffCreateData,
-        staffProcedures: procedureIds && procedureIds.length > 0
-          ? {
-              create: procedureIds.map((procedureId: string) => ({
-                procedureId,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        staffProcedures: {
-          include: {
-            procedure: true,
+    // Criar staff e relacionamentos dentro de transação com tenant context (RLS/pooler-safe)
+    const staff = await this.tenantPrisma.run(async (tx) => {
+      return tx.staff.create({
+        data: {
+          ...staffCreateData,
+          staffProcedures:
+            procedureIds && procedureIds.length > 0
+              ? {
+                  create: procedureIds.map((procedureId: string) => ({
+                    tenantId,
+                    procedureId,
+                  })),
+                }
+              : undefined,
+        },
+        include: {
+          staffProcedures: {
+            include: {
+              procedure: true,
+            },
           },
         },
-      },
+      });
     });
 
     return staff;
@@ -215,44 +228,58 @@ export class StaffService {
       }
     }
 
-    // Gerenciar relacionamento de procedimentos se procedureIds foi fornecido
-    if (procedureIds !== undefined) {
-      // Remover todos os relacionamentos existentes
-      await this.prisma.client.staffProcedure.deleteMany({
-        where: { staffId: id },
-      });
-
-      // Criar novos relacionamentos se houver procedimentos
-      if (procedureIds && procedureIds.length > 0) {
-        await this.prisma.client.staffProcedure.createMany({
-          data: procedureIds.map((procedureId: string) => ({
-            staffId: id,
-            procedureId,
-          })),
+    return this.tenantPrisma.run(async (tx) => {
+      // Gerenciar relacionamento de procedimentos se procedureIds foi fornecido
+      if (procedureIds !== undefined) {
+        await tx.staffProcedure.deleteMany({
+          where: { staffId: staff.id, tenantId },
         });
-      }
-    }
 
-    return this.prisma.client.staff.update({
-      where: { id, tenantId },
-      data: {
-        ...staffData,
-        userId,
-      },
-      include: {
-        user: true,
-        staffProcedures: {
-          include: {
-            procedure: true,
+        const uniqueProcedureIds = Array.isArray(procedureIds)
+          ? Array.from(new Set(procedureIds))
+          : [];
+
+        if (uniqueProcedureIds.length > 0) {
+          await tx.staffProcedure.createMany({
+            data: uniqueProcedureIds.map((procedureId: string) => ({
+              tenantId,
+              staffId: staff.id,
+              procedureId,
+            })),
+          });
+        }
+      }
+
+      return tx.staff.update({
+        where: { id: staff.id },
+        data: {
+          ...staffData,
+          userId,
+        },
+        include: {
+          user: true,
+          staffProcedures: {
+            include: {
+              procedure: true,
+            },
           },
         },
-      },
+      });
     });
   }
 
   async remove(tenantId: string, id: string) {
-    return this.prisma.client.staff.delete({
+    const staff = await this.prisma.client.staff.findFirst({
       where: { id, tenantId },
+      select: { id: true },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('Membro da equipe não encontrado');
+    }
+
+    return this.prisma.client.staff.delete({
+      where: { id: staff.id },
     });
   }
 

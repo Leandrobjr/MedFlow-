@@ -9,5 +9,3 @@ import { TenantPrismaService } from './tenant-prisma.service';
   exports: [PrismaService, TenantContextService, TenantPrismaService],
 })
 export class PrismaModule {}
-
-

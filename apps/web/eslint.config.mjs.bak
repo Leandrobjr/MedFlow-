@@ -1,0 +1,35 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { FlatCompat } from "@eslint/eslintrc";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Permite reutilizar "extends" antigos (next/core-web-vitals etc.) dentro do Flat Config
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+export default [
+  // Base do Next (inclui react, next, hooks, etc.)
+  ...compat.extends("next/core-web-vitals"),
+
+  // TypeScript rules recomendadas
+  ...compat.extends("plugin:@typescript-eslint/recommended"),
+
+  // Regras finais (onde você “trava” o comportamento)
+  {
+    files: ["**/*.{ts,tsx,js,jsx}"],
+    rules: {
+      // Destrava lint (era o que te matava)
+      "@typescript-eslint/no-explicit-any": "off",
+      "react/no-unescaped-entities": "off",
+
+      // Governança sem travar pipeline
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "react-hooks/exhaustive-deps": "warn",
+      "prefer-const": "warn",
+    },
+  },
+];
+

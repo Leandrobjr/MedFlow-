@@ -861,7 +861,7 @@ export default function FinanceiroPage() {
   };
 
   // Função para construir opções de categorias hierárquicas
-  const buildCategoryOptions = (categories: ExpenseCategory[], parentId: string | null = null, level: number = 0): JSX.Element[] => {
+  const buildCategoryOptions = (categories: ExpenseCategory[], parentId: string | null = null, level: number = 0): React.ReactNode[] => {
     const filtered = categories.filter(cat => {
       const matchesParent = cat.parentId === parentId;
       const isActive = cat.isActive;
@@ -1570,20 +1570,21 @@ export default function FinanceiroPage() {
                       const doctorIdToUse = doctor?.id || docId;
                       // Usar o nome do médico encontrado ou do grupo
                       const doctorName = doctor?.name || group.doctor.name || 'Desconhecido';
-                      // Criar objeto doctor mínimo se não for encontrado, usando dados dos fees
-                      const doctorObject: Staff | null = doctor || (group.fees.length > 0 ? {
-                        id: docId,
-                        name: group.doctor.name || group.fees[0]?.staff?.name || group.fees[0]?.doctor?.name || 'Desconhecido',
-                        specialty: group.fees[0]?.staff?.specialty || null,
-                        crm: group.fees[0]?.staff?.crm || null,
-                        tenantId: '',
-                        role: 'DOCTOR',
-                        email: '',
-                        phone: null,
-                        active: true,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                      } as Staff : null);
+                      // Criar objeto Staff mínimo se não for encontrado, usando dados dos fees
+                      const doctorObject: Staff | null =
+                        doctor ||
+                        (group.fees.length > 0
+                          ? {
+                              id: docId,
+                              name:
+                                group.doctor.name ||
+                                group.fees[0]?.staff?.name ||
+                                group.fees[0]?.doctor?.name ||
+                                'Desconhecido',
+                              role: 'DOCTOR',
+                              specialty: group.fees[0]?.staff?.specialty ?? undefined,
+                            }
+                          : null);
                       
                       return (
                         <div key={docId} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
@@ -2752,14 +2753,29 @@ export default function FinanceiroPage() {
                 <h4 className="text-lg font-bold text-gray-900 mb-3 print:text-sm print:mb-2">Detalhamento dos Atendimentos</h4>
                 <div className="space-y-2 print:space-y-0.5 print:gap-0">
                   {selectedRepasseForView.fees.map((fee, idx) => {
-                    const patientName = fee.transaction?.appointment?.patient?.name || fee.appointment?.patient?.name || 'Não informado';
-                    const patientCpf = fee.transaction?.appointment?.patient?.cpf || fee.appointment?.patient?.cpf;
-                    const procedureName = fee.transaction?.appointment?.procedure?.name || 'Não informado';
+                    const patientName = fee.appointment?.patient?.name || 'Não informado';
+                    const patientCpf = fee.appointment?.patient?.cpf;
+                    const procedureName =
+                      fee.appointment?.procedure?.name ||
+                      fee.transaction?.description ||
+                      'Não informado';
                     const grossAmount = fee.grossAmount ? parseFloat(String(fee.grossAmount)) : 0;
                     const feeValue = fee.feeAmount ? parseFloat(String(fee.feeAmount)) : 0;
                     const commissionRate = fee.commissionRate ? parseFloat(String(fee.commissionRate)) : 0;
-                    // Usar o horário da consulta (startTime) se disponível, senão usar createdAt
-                    const date = fee.transaction?.appointment?.startTime || fee.transaction?.createdAt || fee.createdAt || new Date();
+// Usar o horário da consulta (startTime) se disponível, senão usar fallback
+const appointmentStart =
+  (fee.appointment as any)?.startTime ??
+  (fee.appointment as any)?.startAt ??
+  (fee.appointment as any)?.start ??
+  (fee.transaction as any)?.createdAt ??
+  (fee as any)?.createdAt ??
+  (fee as any)?.paidAt ??
+  (fee as any)?.periodStart ??
+  (fee as any)?.periodEnd ??
+  new Date();
+
+const date = new Date(appointmentStart);
+
                     
                     return (
                       <div 

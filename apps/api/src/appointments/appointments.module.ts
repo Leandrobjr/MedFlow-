@@ -7,5 +7,3 @@ import { AppointmentsController } from './appointments.controller';
   providers: [AppointmentsService],
 })
 export class AppointmentsModule {}
-
-

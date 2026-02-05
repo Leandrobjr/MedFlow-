@@ -7,7 +7,7 @@ import { AppModule } from '../src/app.module';
 
 /**
  * FASE 4: Testes e2e de isolamento multi-tenant (RLS) - OBRIGATÓRIO
- * 
+ *
  * Valida que:
  * - Tenant A só vê dados do tenant A
  * - Tenant B só vê dados do tenant B
@@ -15,7 +15,7 @@ import { AppModule } from '../src/app.module';
  * - RLS funciona corretamente em ambos os caminhos:
  *   a) prisma.withTenant(tenantId, ...)
  *   b) tenantPrisma.run(...) com AsyncLocalStorage
- * 
+ *
  * Para rodar: pnpm test:e2e tenant-isolation
  */
 describe('Tenant Isolation (e2e)', () => {
@@ -40,7 +40,8 @@ describe('Tenant Isolation (e2e)', () => {
 
     prisma = moduleFixture.get<PrismaService>(PrismaService);
     tenantPrisma = moduleFixture.get<TenantPrismaService>(TenantPrismaService);
-    tenantContext = moduleFixture.get<TenantContextService>(TenantContextService);
+    tenantContext =
+      moduleFixture.get<TenantContextService>(TenantContextService);
   });
 
   beforeEach(async () => {
@@ -108,10 +109,7 @@ describe('Tenant Isolation (e2e)', () => {
     if (tenantAId && tenantBId) {
       await prisma.client.patient.deleteMany({
         where: {
-          OR: [
-            { tenantId: tenantAId },
-            { tenantId: tenantBId },
-          ],
+          OR: [{ tenantId: tenantAId }, { tenantId: tenantBId }],
         },
       });
     }
@@ -122,10 +120,12 @@ describe('Tenant Isolation (e2e)', () => {
     it('Tenant A deve ver apenas seus próprios pacientes', async () => {
       const patients = await prisma.withTenant(tenantAId, async (tx) => {
         // Verificar que o contexto está setado corretamente
-        const currentTenant = await tx.$queryRaw<Array<{ current_setting: string }>>`
+        const currentTenant = await tx.$queryRaw<
+          Array<{ current_setting: string }>
+        >`
           SELECT current_setting('medflow.current_tenant', true) as current_setting
         `;
-        
+
         expect(currentTenant[0]?.current_setting).toBe(tenantAId);
 
         // Buscar pacientes SEM filtro explícito de tenantId (RLS deve filtrar automaticamente)
@@ -140,10 +140,12 @@ describe('Tenant Isolation (e2e)', () => {
 
     it('Tenant B deve ver apenas seus próprios pacientes', async () => {
       const patients = await prisma.withTenant(tenantBId, async (tx) => {
-        const currentTenant = await tx.$queryRaw<Array<{ current_setting: string }>>`
+        const currentTenant = await tx.$queryRaw<
+          Array<{ current_setting: string }>
+        >`
           SELECT current_setting('medflow.current_tenant', true) as current_setting
         `;
-        
+
         expect(currentTenant[0]?.current_setting).toBe(tenantBId);
 
         // Buscar pacientes SEM filtro explícito de tenantId (RLS deve filtrar automaticamente)
@@ -191,9 +193,9 @@ describe('Tenant Isolation (e2e)', () => {
       expect(patients).toHaveLength(1);
       expect(patients[0].id).toBe(patientAId);
       expect(patients[0].tenantId).toBe(tenantAId);
-      
+
       // Validar que NÃO contém pacientes do tenant B
-      const hasTenantBPatient = patients.some(p => p.id === patientBId);
+      const hasTenantBPatient = patients.some((p) => p.id === patientBId);
       expect(hasTenantBPatient).toBe(false);
     });
 
@@ -208,9 +210,9 @@ describe('Tenant Isolation (e2e)', () => {
       expect(patients).toHaveLength(1);
       expect(patients[0].id).toBe(patientBId);
       expect(patients[0].tenantId).toBe(tenantBId);
-      
+
       // Validar que NÃO contém pacientes do tenant A
-      const hasTenantAPatient = patients.some(p => p.id === patientAId);
+      const hasTenantAPatient = patients.some((p) => p.id === patientAId);
       expect(hasTenantAPatient).toBe(false);
     });
   });
@@ -219,10 +221,12 @@ describe('Tenant Isolation (e2e)', () => {
     it('TenantPrismaService deve funcionar dentro do contexto do Tenant A', async () => {
       const result = await tenantContext.runAsync(tenantAId, async () => {
         return tenantPrisma.run(async (tx) => {
-          const currentTenant = await tx.$queryRaw<Array<{ current_setting: string }>>`
+          const currentTenant = await tx.$queryRaw<
+            Array<{ current_setting: string }>
+          >`
             SELECT current_setting('medflow.current_tenant', true) as current_setting
           `;
-          
+
           expect(currentTenant[0]?.current_setting).toBe(tenantAId);
 
           return tx.patient.findMany();
@@ -237,10 +241,12 @@ describe('Tenant Isolation (e2e)', () => {
     it('TenantPrismaService deve funcionar dentro do contexto do Tenant B', async () => {
       const result = await tenantContext.runAsync(tenantBId, async () => {
         return tenantPrisma.run(async (tx) => {
-          const currentTenant = await tx.$queryRaw<Array<{ current_setting: string }>>`
+          const currentTenant = await tx.$queryRaw<
+            Array<{ current_setting: string }>
+          >`
             SELECT current_setting('medflow.current_tenant', true) as current_setting
           `;
-          
+
           expect(currentTenant[0]?.current_setting).toBe(tenantBId);
 
           return tx.patient.findMany();
@@ -273,9 +279,9 @@ describe('Tenant Isolation (e2e)', () => {
       expect(patients).toHaveLength(1);
       expect(patients[0].id).toBe(patientAId);
       expect(patients[0].tenantId).toBe(tenantAId);
-      
+
       // Validar que NÃO contém pacientes do tenant B
-      const hasTenantBPatient = patients.some(p => p.id === patientBId);
+      const hasTenantBPatient = patients.some((p) => p.id === patientBId);
       expect(hasTenantBPatient).toBe(false);
     });
 
@@ -291,9 +297,9 @@ describe('Tenant Isolation (e2e)', () => {
       expect(patients).toHaveLength(1);
       expect(patients[0].id).toBe(patientBId);
       expect(patients[0].tenantId).toBe(tenantBId);
-      
+
       // Validar que NÃO contém pacientes do tenant A
-      const hasTenantAPatient = patients.some(p => p.id === patientAId);
+      const hasTenantAPatient = patients.some((p) => p.id === patientAId);
       expect(hasTenantAPatient).toBe(false);
     });
   });

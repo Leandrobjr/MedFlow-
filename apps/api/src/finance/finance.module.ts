@@ -8,5 +8,3 @@ import { FinanceController } from './finance.controller';
   exports: [FinanceService], // Exportar para uso em outros módulos
 })
 export class FinanceModule {}
-
-

@@ -16,17 +16,19 @@ export class AuditService {
     userAgent?: string;
   }) {
     try {
-      return await this.prisma.client.auditLog.create({
-        data: {
-          tenantId: data.tenantId,
-          userId: data.userId,
-          action: data.action,
-          entity: data.entity,
-          entityId: data.entityId,
-          metadata: data.metadata,
-          ipAddress: data.ipAddress,
-          userAgent: data.userAgent,
-        },
+      return await this.prisma.withTenant(data.tenantId, async (tx) => {
+        return tx.auditLog.create({
+          data: {
+            tenantId: data.tenantId,
+            userId: data.userId,
+            action: data.action,
+            entity: data.entity,
+            entityId: data.entityId,
+            metadata: data.metadata,
+            ipAddress: data.ipAddress,
+            userAgent: data.userAgent,
+          },
+        });
       });
     } catch (error) {
       // Falha no log não deve travar a aplicação, mas deve ser logada no console

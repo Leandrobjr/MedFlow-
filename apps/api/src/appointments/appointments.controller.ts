@@ -37,12 +37,12 @@ export class AppointmentsController {
     const isAdmin = userRole === 'admin' || userRole === 'owner';
     const isReceptionist = userRole === 'receptionist';
     const userStaffId = req.user?.staffId;
-    
+
     // RECEPTIONIST pode ver todos os agendamentos (não filtra por doctorId)
     // DOCTOR vê apenas os próprios agendamentos
     // ADMIN/OWNER pode ver todos ou filtrar por doctorId específico
     let finalDoctorId: string | undefined;
-    
+
     if (isReceptionist) {
       // Recepcionista vê todos os agendamentos, não filtra por doctorId
       finalDoctorId = undefined;
@@ -54,8 +54,14 @@ export class AppointmentsController {
       finalDoctorId = userStaffId;
     }
     // Se for admin e não passou doctorId, finalDoctorId fica undefined (vê todos)
-    
-    return this.appointmentsService.findAll(req.tenantId, finalDoctorId, date, startDate, endDate);
+
+    return this.appointmentsService.findAll(
+      req.tenantId,
+      finalDoctorId,
+      date,
+      startDate,
+      endDate,
+    );
   }
 
   @Get(':id')
@@ -71,8 +77,8 @@ export class AppointmentsController {
     @Body('status') status: string,
   ) {
     return this.appointmentsService.updateStatus(
-      req.tenantId, 
-      id, 
+      req.tenantId,
+      id,
       status,
       req.user?.role,
       req.user?.staffId,
@@ -85,5 +91,3 @@ export class AppointmentsController {
     return this.appointmentsService.remove(req.tenantId, id);
   }
 }
-
-

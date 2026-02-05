@@ -10,7 +10,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FinanceService } from './finance.service';
-import { CreateTransactionDto, UpdateTransactionDto, CreateClosureDto, CloseReceptionistBoxDto, CloseAdminBoxDto, CloseMedicalFeePaymentDto } from './dto/finance.dto';
+import {
+  CreateTransactionDto,
+  UpdateTransactionDto,
+  CreateClosureDto,
+  CloseReceptionistBoxDto,
+  CloseAdminBoxDto,
+  CloseMedicalFeePaymentDto,
+} from './dto/finance.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/shared-types';
 
@@ -21,17 +28,28 @@ export class FinanceController {
   @Post('transactions')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
   createTransaction(@Req() req: any, @Body() dto: CreateTransactionDto) {
-    return this.financeService.createTransaction(req.tenantId, dto, req.user?.id, req.user?.role);
+    return this.financeService.createTransaction(
+      req.tenantId,
+      dto,
+      req.user?.id,
+      req.user?.role,
+    );
   }
 
   @Put('transactions/:id')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
   updateTransaction(
-    @Req() req: any, 
-    @Param('id') id: string, 
-    @Body() dto: UpdateTransactionDto
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateTransactionDto,
   ) {
-    return this.financeService.updateTransaction(req.tenantId, id, dto, req.user?.id, req.user?.role);
+    return this.financeService.updateTransaction(
+      req.tenantId,
+      id,
+      dto,
+      req.user?.id,
+      req.user?.role,
+    );
   }
 
   @Get('transactions')
@@ -41,7 +59,11 @@ export class FinanceController {
     @Query('date') date?: string,
     @Query('createdById') createdById?: string,
   ) {
-    return this.financeService.getDailyTransactions(req.tenantId, date, createdById);
+    return this.financeService.getDailyTransactions(
+      req.tenantId,
+      date,
+      createdById,
+    );
   }
 
   @Post('closures')
@@ -58,7 +80,12 @@ export class FinanceController {
     @Query('userId') userId?: string,
     @Query('closureType') closureType?: string,
   ) {
-    return this.financeService.getClosureStatus(req.tenantId, date, userId, closureType);
+    return this.financeService.getClosureStatus(
+      req.tenantId,
+      date,
+      userId,
+      closureType,
+    );
   }
 
   @Get('boxes/status')
@@ -70,7 +97,11 @@ export class FinanceController {
   ) {
     // Se userId foi passado, usa ele. Se não, não filtra (Admin/Owner veem tudo)
     // O frontend é responsável por passar userId quando quiser filtrar por recepcionista
-    return this.financeService.getBoxStatus(req.tenantId, date, userId || undefined);
+    return this.financeService.getBoxStatus(
+      req.tenantId,
+      date,
+      userId || undefined,
+    );
   }
 
   @Post('boxes/receptionist/close')
@@ -79,7 +110,11 @@ export class FinanceController {
     if (!req.user?.id) {
       throw new BadRequestException('Usuário não identificado');
     }
-    return this.financeService.closeReceptionistBox(req.tenantId, req.user.id, dto);
+    return this.financeService.closeReceptionistBox(
+      req.tenantId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Post('boxes/admin/close')
@@ -105,16 +140,29 @@ export class FinanceController {
       // Forçar o staffId do médico logado
       doctorId = req.user.staffId;
     }
-    return this.financeService.getMedicalFees(req.tenantId, doctorId, startDate, endDate, status);
+    return this.financeService.getMedicalFees(
+      req.tenantId,
+      doctorId,
+      startDate,
+      endDate,
+      status,
+    );
   }
 
   @Post('medical-fees/close')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
-  closeMedicalFeePayment(@Req() req: any, @Body() dto: CloseMedicalFeePaymentDto) {
+  closeMedicalFeePayment(
+    @Req() req: any,
+    @Body() dto: CloseMedicalFeePaymentDto,
+  ) {
     if (!req.user?.id) {
       throw new Error('Usuário não identificado');
     }
-    return this.financeService.closeMedicalFeePayment(req.tenantId, req.user.id, dto);
+    return this.financeService.closeMedicalFeePayment(
+      req.tenantId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Get('medical-fees/payments')
@@ -129,7 +177,12 @@ export class FinanceController {
     if (req.user.role === UserRole.DOCTOR && req.user.staffId) {
       staffId = req.user.staffId;
     }
-    return this.financeService.getMedicalFeePayments(req.tenantId, staffId, startDate, endDate);
+    return this.financeService.getMedicalFeePayments(
+      req.tenantId,
+      staffId,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('medical-fees/summary/:doctorId')
@@ -140,8 +193,14 @@ export class FinanceController {
 
   @Get('transactions/check-appointment/:appointmentId')
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
-  checkAppointmentBilling(@Req() req: any, @Param('appointmentId') appointmentId: string) {
-    return this.financeService.checkAppointmentBilling(req.tenantId, appointmentId);
+  checkAppointmentBilling(
+    @Req() req: any,
+    @Param('appointmentId') appointmentId: string,
+  ) {
+    return this.financeService.checkAppointmentBilling(
+      req.tenantId,
+      appointmentId,
+    );
   }
 
   @Get('closures')
@@ -157,7 +216,13 @@ export class FinanceController {
     if (req.user.role === UserRole.RECEPTIONIST) {
       userId = req.user.id;
     }
-    return this.financeService.getDailyClosures(req.tenantId, startDate, endDate, userId, closureType);
+    return this.financeService.getDailyClosures(
+      req.tenantId,
+      startDate,
+      endDate,
+      userId,
+      closureType,
+    );
   }
 
   @Get('closures/preview')
@@ -170,8 +235,15 @@ export class FinanceController {
     if (!date) {
       throw new BadRequestException('Data é obrigatória');
     }
-    const type = closureType || (req.user.role === UserRole.RECEPTIONIST ? 'RECEPTIONIST' : 'ADMIN');
-    return this.financeService.getClosurePreview(req.tenantId, date, req.user.id, type);
+    const type =
+      closureType ||
+      (req.user.role === UserRole.RECEPTIONIST ? 'RECEPTIONIST' : 'ADMIN');
+    return this.financeService.getClosurePreview(
+      req.tenantId,
+      date,
+      req.user.id,
+      type,
+    );
   }
 
   @Post('medical-fees/recreate-missing')
@@ -181,7 +253,11 @@ export class FinanceController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.financeService.recreateMissingMedicalFees(req.tenantId, startDate, endDate);
+    return this.financeService.recreateMissingMedicalFees(
+      req.tenantId,
+      startDate,
+      endDate,
+    );
   }
 
   @Get('medical-fees/diagnose')
@@ -208,4 +284,3 @@ export class FinanceController {
     return this.financeService.fixTransactionStaffIds(req.tenantId);
   }
 }
-

@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsOptional, IsString, IsNumber, IsBoolean, IsObject, ValidateNested } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsObject,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class DayPeriodDto {
@@ -90,4 +98,3 @@ export class UpdateScheduleConfigDto {
   @IsOptional()
   isActive?: boolean;
 }
-

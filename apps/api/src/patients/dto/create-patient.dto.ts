@@ -1,4 +1,10 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsDateString } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsDateString,
+} from 'class-validator';
 
 export class CreatePatientDto {
   @IsString()
@@ -41,5 +47,3 @@ export class CreatePatientDto {
   @IsOptional()
   zipCode?: string;
 }
-
-

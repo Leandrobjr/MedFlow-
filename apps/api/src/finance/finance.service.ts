@@ -1,7 +1,20 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
-import { CreateTransactionDto, UpdateTransactionDto, CreateClosureDto, CloseReceptionistBoxDto, CloseAdminBoxDto, CloseMedicalFeePaymentDto, TransactionType } from './dto/finance.dto';
+import {
+  CreateTransactionDto,
+  UpdateTransactionDto,
+  CreateClosureDto,
+  CloseReceptionistBoxDto,
+  CloseAdminBoxDto,
+  CloseMedicalFeePaymentDto,
+  TransactionType,
+} from './dto/finance.dto';
 import { UserRole } from '../common/shared-types';
 
 @Injectable()
@@ -11,13 +24,18 @@ export class FinanceService {
     private readonly tenantPrisma: TenantPrismaService,
   ) {}
 
-  async createTransaction(tenantId: string, dto: CreateTransactionDto, userId?: string, userRole?: string) {
+  async createTransaction(
+    tenantId: string,
+    dto: CreateTransactionDto,
+    userId?: string,
+    userRole?: string,
+  ) {
     // Usar tenantPrisma.run para garantir isolamento determinístico em todas as operações críticas
     return this.tenantPrisma.run(async (tx) => {
       // 1. Verificar se o caixa do recepcionista/admin já foi fechado
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       // Se for recepcionista, verificar se o caixa dele foi fechado
       if (userRole === UserRole.RECEPTIONIST && userId) {
         const closure = await tx.dailyClosure.findFirst({
@@ -30,12 +48,17 @@ export class FinanceService {
         });
 
         if (closure) {
-          throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível realizar novas transações.');
+          throw new BadRequestException(
+            'Seu caixa deste dia já foi fechado. Não é possível realizar novas transações.',
+          );
         }
       }
-      
+
       // Se for admin, verificar se o caixa administrativo foi fechado
-      if ((userRole === UserRole.ADMIN || userRole === UserRole.OWNER) && userId) {
+      if (
+        (userRole === UserRole.ADMIN || userRole === UserRole.OWNER) &&
+        userId
+      ) {
         const closure = await tx.dailyClosure.findFirst({
           where: {
             tenantId,
@@ -46,7 +69,9 @@ export class FinanceService {
         });
 
         if (closure) {
-          throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível realizar novas transações.');
+          throw new BadRequestException(
+            'O caixa administrativo deste dia já foi fechado. Não é possível realizar novas transações.',
+          );
         }
       }
 
@@ -67,31 +92,47 @@ export class FinanceService {
         });
 
         if (!appointment || appointment.tenantId !== tenantId) {
-          throw new NotFoundException('Agendamento não encontrado ou não pertence a este tenant.');
+          throw new NotFoundException(
+            'Agendamento não encontrado ou não pertence a este tenant.',
+          );
         }
 
         // Verificar se o agendamento não está cancelado
-        if (appointment.status === 'CANCELED' || appointment.status === 'canceled') {
-          throw new BadRequestException('Não é possível faturar um agendamento cancelado.');
+        if (
+          appointment.status === 'CANCELED' ||
+          appointment.status === 'canceled'
+        ) {
+          throw new BadRequestException(
+            'Não é possível faturar um agendamento cancelado.',
+          );
         }
 
-        console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
-          appointmentId: appointment.id,
-          appointmentStaffId: appointment.staffId,
-          dtoStaffId: dto.staffId,
-          staffIdsMatch: appointment.staffId === dto.staffId,
-        });
+        console.log(
+          `[FinanceService.createTransaction] DEBUG - Appointment encontrado:`,
+          {
+            appointmentId: appointment.id,
+            appointmentStaffId: appointment.staffId,
+            dtoStaffId: dto.staffId,
+            staffIdsMatch: appointment.staffId === dto.staffId,
+          },
+        );
 
         // Se não foi passado staffId, usar o do appointment
         // IMPORTANTE: Sempre usar o staffId do appointment para garantir consistência
         if (appointment.staffId) {
           if (dto.staffId && dto.staffId !== appointment.staffId) {
-            console.warn(`[FinanceService.createTransaction] DEBUG - staffId do DTO (${dto.staffId}) difere do appointment (${appointment.staffId}). Usando o do appointment.`);
+            console.warn(
+              `[FinanceService.createTransaction] DEBUG - staffId do DTO (${dto.staffId}) difere do appointment (${appointment.staffId}). Usando o do appointment.`,
+            );
           }
           dto.staffId = appointment.staffId;
-          console.log(`[FinanceService.createTransaction] DEBUG - staffId definido como: ${dto.staffId} (do appointment)`);
+          console.log(
+            `[FinanceService.createTransaction] DEBUG - staffId definido como: ${dto.staffId} (do appointment)`,
+          );
         } else if (!dto.staffId) {
-          console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${appointment.id} não possui staffId e DTO também não tem. Repasse não será criado.`);
+          console.warn(
+            `[FinanceService.createTransaction] DEBUG - Appointment ${appointment.id} não possui staffId e DTO também não tem. Repasse não será criado.`,
+          );
         }
 
         // Se não foi passado patientId, usar o do appointment
@@ -111,7 +152,9 @@ export class FinanceService {
         });
 
         if (!category) {
-          throw new NotFoundException('Categoria de despesa não encontrada ou inativa.');
+          throw new NotFoundException(
+            'Categoria de despesa não encontrada ou inativa.',
+          );
         }
       }
 
@@ -150,46 +193,58 @@ export class FinanceService {
           });
         } catch (error) {
           // Log do erro mas não falha a criação da transação
-          console.error(`Erro ao atualizar status do appointment ${dto.appointmentId}:`, error);
+          console.error(
+            `Erro ao atualizar status do appointment ${dto.appointmentId}:`,
+            error,
+          );
         }
       }
 
       console.log(`[FinanceService] Transação criada:`, {
         id: transaction.id,
         description: transaction.description,
-        appointment: transaction.appointment ? {
-          id: transaction.appointment.id,
-          patient: transaction.appointment.patient?.name,
-        } : null,
+        appointment: transaction.appointment
+          ? {
+              id: transaction.appointment.id,
+              patient: transaction.appointment.patient?.name,
+            }
+          : null,
       });
 
       // Lógica de Repasse Médico (M1-07) - dentro da mesma transação
       // Se for uma entrada de consulta e tiver um médico vinculado
-      console.log(`[FinanceService.createTransaction] DEBUG - Iniciando verificação de repasse:`, {
-        type: dto.type,
-        staffId: dto.staffId,
-        appointmentId: dto.appointmentId,
-        amount: dto.amount,
-        description: dto.description,
-      });
+      console.log(
+        `[FinanceService.createTransaction] DEBUG - Iniciando verificação de repasse:`,
+        {
+          type: dto.type,
+          staffId: dto.staffId,
+          appointmentId: dto.appointmentId,
+          amount: dto.amount,
+          description: dto.description,
+        },
+      );
 
       if (dto.type === TransactionType.INCOME && dto.staffId) {
-        console.log(`[FinanceService.createTransaction] DEBUG - Condição atendida: INCOME com staffId`);
-        
+        console.log(
+          `[FinanceService.createTransaction] DEBUG - Condição atendida: INCOME com staffId`,
+        );
+
         // Declarar appointmentWithRecord para uso posterior
         let appointmentWithRecord: any = null;
-        
+
         // Se tiver appointmentId, verificar se o prontuário está finalizado
         if (dto.appointmentId) {
-          console.log(`[FinanceService.createTransaction] DEBUG - Buscando appointment com medicalRecord: ${dto.appointmentId}`);
+          console.log(
+            `[FinanceService.createTransaction] DEBUG - Buscando appointment com medicalRecord: ${dto.appointmentId}`,
+          );
           appointmentWithRecord = await tx.appointment.findUnique({
             where: { id: dto.appointmentId },
-            include: { 
-              medicalRecord: { 
-                select: { 
-                  id: true, 
-                  isFinalized: true 
-                } 
+            include: {
+              medicalRecord: {
+                select: {
+                  id: true,
+                  isFinalized: true,
+                },
               },
               staff: {
                 select: {
@@ -204,35 +259,55 @@ export class FinanceService {
             },
           });
 
-          console.log(`[FinanceService.createTransaction] DEBUG - Appointment encontrado:`, {
-            appointmentId: appointmentWithRecord?.id,
-            appointmentStaffId: appointmentWithRecord?.staffId,
-            appointmentStaffName: appointmentWithRecord?.staff?.name,
-            appointmentStaffCommissionRate: appointmentWithRecord?.staff?.commissionRate,
-            hasMedicalRecord: !!appointmentWithRecord?.medicalRecord,
-            medicalRecordId: appointmentWithRecord?.medicalRecord?.id,
-            isFinalized: appointmentWithRecord?.medicalRecord?.isFinalized,
-            dtoStaffId: dto.staffId,
-            staffIdsMatch: appointmentWithRecord?.staffId === dto.staffId,
-          });
+          console.log(
+            `[FinanceService.createTransaction] DEBUG - Appointment encontrado:`,
+            {
+              appointmentId: appointmentWithRecord?.id,
+              appointmentStaffId: appointmentWithRecord?.staffId,
+              appointmentStaffName: appointmentWithRecord?.staff?.name,
+              appointmentStaffCommissionRate:
+                appointmentWithRecord?.staff?.commissionRate,
+              hasMedicalRecord: !!appointmentWithRecord?.medicalRecord,
+              medicalRecordId: appointmentWithRecord?.medicalRecord?.id,
+              isFinalized: appointmentWithRecord?.medicalRecord?.isFinalized,
+              dtoStaffId: dto.staffId,
+              staffIdsMatch: appointmentWithRecord?.staffId === dto.staffId,
+            },
+          );
 
-          if (appointmentWithRecord?.medicalRecord && !appointmentWithRecord.medicalRecord.isFinalized) {
-            console.warn(`[FinanceService.createTransaction] DEBUG - Prontuário não finalizado. Bloqueando criação de repasse.`);
-            throw new BadRequestException('Não é possível gerar repasse para atendimento com prontuário não finalizado.');
+          if (
+            appointmentWithRecord?.medicalRecord &&
+            !appointmentWithRecord.medicalRecord.isFinalized
+          ) {
+            console.warn(
+              `[FinanceService.createTransaction] DEBUG - Prontuário não finalizado. Bloqueando criação de repasse.`,
+            );
+            throw new BadRequestException(
+              'Não é possível gerar repasse para atendimento com prontuário não finalizado.',
+            );
           }
 
           if (!appointmentWithRecord?.medicalRecord) {
-            console.warn(`[FinanceService.createTransaction] DEBUG - Appointment ${dto.appointmentId} não possui prontuário. Repasse não será criado agora (será criado retroativamente quando o prontuário for finalizado).`);
+            console.warn(
+              `[FinanceService.createTransaction] DEBUG - Appointment ${dto.appointmentId} não possui prontuário. Repasse não será criado agora (será criado retroativamente quando o prontuário for finalizado).`,
+            );
           }
 
           // Se o appointment tem staffId diferente do dto.staffId, usar o do appointment
-          if (appointmentWithRecord?.staffId && appointmentWithRecord.staffId !== dto.staffId) {
-            console.log(`[FinanceService.createTransaction] DEBUG - Corrigindo staffId: dto.staffId=${dto.staffId}, appointment.staffId=${appointmentWithRecord.staffId}`);
+          if (
+            appointmentWithRecord?.staffId &&
+            appointmentWithRecord.staffId !== dto.staffId
+          ) {
+            console.log(
+              `[FinanceService.createTransaction] DEBUG - Corrigindo staffId: dto.staffId=${dto.staffId}, appointment.staffId=${appointmentWithRecord.staffId}`,
+            );
             dto.staffId = appointmentWithRecord.staffId;
           }
         }
-        
-        console.log(`[FinanceService.createTransaction] DEBUG - Buscando médico com staffId: ${dto.staffId}`);
+
+        console.log(
+          `[FinanceService.createTransaction] DEBUG - Buscando médico com staffId: ${dto.staffId}`,
+        );
         const doctor = await tx.staff.findUnique({
           where: { id: dto.staffId },
           select: {
@@ -245,66 +320,87 @@ export class FinanceService {
           },
         });
 
-        console.log(`[FinanceService.createTransaction] DEBUG - Médico encontrado:`, {
-          id: doctor?.id,
-          name: doctor?.name,
-          commissionType: doctor?.commissionType,
-          commissionRate: doctor?.commissionRate,
-          fixedCommission: doctor?.fixedCommission,
-          role: doctor?.role,
-        });
+        console.log(
+          `[FinanceService.createTransaction] DEBUG - Médico encontrado:`,
+          {
+            id: doctor?.id,
+            name: doctor?.name,
+            commissionType: doctor?.commissionType,
+            commissionRate: doctor?.commissionRate,
+            fixedCommission: doctor?.fixedCommission,
+            role: doctor?.role,
+          },
+        );
 
         if (!doctor) {
-          console.error(`[FinanceService.createTransaction] DEBUG - ERRO: Médico não encontrado com staffId: ${dto.staffId}`);
+          console.error(
+            `[FinanceService.createTransaction] DEBUG - ERRO: Médico não encontrado com staffId: ${dto.staffId}`,
+          );
         } else {
           // Verificar se tem configuração de repasse válida
           const isPercentage = doctor.commissionType === 'PERCENTAGE';
           const isFixed = doctor.commissionType === 'FIXED';
-          
+
           let feeAmount: number | null = null;
           let commissionRate: number | null = null;
           let fixedCommission: number | null = null;
 
           if (isPercentage) {
             if (!doctor.commissionRate || Number(doctor.commissionRate) <= 0) {
-              console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate})`);
+              console.warn(
+                `[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate})`,
+              );
             } else {
               commissionRate = Number(doctor.commissionRate);
               const grossAmount = Number(dto.amount);
               feeAmount = (grossAmount * commissionRate) / 100;
             }
           } else if (isFixed) {
-            if (!doctor.fixedCommission || Number(doctor.fixedCommission) <= 0) {
-              console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo FIXED mas sem fixedCommission ou fixedCommission = 0 (valor: ${doctor.fixedCommission})`);
+            if (
+              !doctor.fixedCommission ||
+              Number(doctor.fixedCommission) <= 0
+            ) {
+              console.warn(
+                `[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo FIXED mas sem fixedCommission ou fixedCommission = 0 (valor: ${doctor.fixedCommission})`,
+              );
             } else {
               fixedCommission = Number(doctor.fixedCommission);
               feeAmount = fixedCommission; // Valor fixo é o próprio feeAmount
               commissionRate = null; // Não usa percentual
             }
           } else {
-            console.warn(`[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}`);
+            console.warn(
+              `[FinanceService.createTransaction] DEBUG - Repasse NÃO criado - médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}`,
+            );
           }
 
           // Só criar repasse se tiver feeAmount válido E (não tiver appointmentId OU tiver appointmentId com prontuário finalizado)
-          const shouldCreateFee = feeAmount !== null && feeAmount > 0 && 
-            (!dto.appointmentId || (appointmentWithRecord?.medicalRecord?.isFinalized === true));
+          const shouldCreateFee =
+            feeAmount !== null &&
+            feeAmount > 0 &&
+            (!dto.appointmentId ||
+              appointmentWithRecord?.medicalRecord?.isFinalized === true);
 
           if (shouldCreateFee) {
             const grossAmount = Number(dto.amount);
 
-            console.log(`[FinanceService.createTransaction] DEBUG - Criando repasse médico:`, {
-              tenantId,
-              staffId: dto.staffId,
-              staffName: doctor.name,
-              commissionType: doctor.commissionType,
-              grossAmount,
-              commissionRate,
-              fixedCommission,
-              feeAmount,
-              appointmentId: dto.appointmentId,
-              hasAppointment: !!dto.appointmentId,
-              hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
-            });
+            console.log(
+              `[FinanceService.createTransaction] DEBUG - Criando repasse médico:`,
+              {
+                tenantId,
+                staffId: dto.staffId,
+                staffName: doctor.name,
+                commissionType: doctor.commissionType,
+                grossAmount,
+                commissionRate,
+                fixedCommission,
+                feeAmount,
+                appointmentId: dto.appointmentId,
+                hasAppointment: !!dto.appointmentId,
+                hasFinalizedRecord:
+                  appointmentWithRecord?.medicalRecord?.isFinalized === true,
+              },
+            );
 
             try {
               // Criar repasse médico dentro da mesma transação
@@ -320,45 +416,70 @@ export class FinanceService {
                 },
               });
 
-              console.log(`[FinanceService.createTransaction] DEBUG - ✅ Repasse médico criado com SUCESSO:`, {
-                id: medicalFee.id,
-                status: medicalFee.status,
-                staffId: medicalFee.staffId,
-                staffName: doctor.name,
-                commissionType: doctor.commissionType,
-                feeAmount: medicalFee.feeAmount,
-                grossAmount: medicalFee.grossAmount,
-                commissionRate: medicalFee.commissionRate,
-              });
+              console.log(
+                `[FinanceService.createTransaction] DEBUG - ✅ Repasse médico criado com SUCESSO:`,
+                {
+                  id: medicalFee.id,
+                  status: medicalFee.status,
+                  staffId: medicalFee.staffId,
+                  staffName: doctor.name,
+                  commissionType: doctor.commissionType,
+                  feeAmount: medicalFee.feeAmount,
+                  grossAmount: medicalFee.grossAmount,
+                  commissionRate: medicalFee.commissionRate,
+                },
+              );
             } catch (error) {
-              console.error(`[FinanceService.createTransaction] DEBUG - ❌ ERRO ao criar repasse:`, error);
+              console.error(
+                `[FinanceService.createTransaction] DEBUG - ❌ ERRO ao criar repasse:`,
+                error,
+              );
               throw error;
             }
           } else {
-            console.log(`[FinanceService.createTransaction] DEBUG - ⚠️ Repasse NÃO criado. Motivo:`, {
-              hasFeeAmount: feeAmount !== null && feeAmount > 0,
-              hasAppointmentId: !!dto.appointmentId,
-              hasFinalizedRecord: appointmentWithRecord?.medicalRecord?.isFinalized === true,
-              shouldCreate: shouldCreateFee,
-            });
+            console.log(
+              `[FinanceService.createTransaction] DEBUG - ⚠️ Repasse NÃO criado. Motivo:`,
+              {
+                hasFeeAmount: feeAmount !== null && feeAmount > 0,
+                hasAppointmentId: !!dto.appointmentId,
+                hasFinalizedRecord:
+                  appointmentWithRecord?.medicalRecord?.isFinalized === true,
+                shouldCreate: shouldCreateFee,
+              },
+            );
           }
         }
       } else {
-        console.log(`[FinanceService.createTransaction] DEBUG - Repasse NÃO verificado:`, {
-          reason: !dto.staffId ? 'sem staffId' : dto.type !== TransactionType.INCOME ? 'não é INCOME' : 'desconhecido',
-          type: dto.type,
-          staffId: dto.staffId,
-        });
+        console.log(
+          `[FinanceService.createTransaction] DEBUG - Repasse NÃO verificado:`,
+          {
+            reason: !dto.staffId
+              ? 'sem staffId'
+              : dto.type !== TransactionType.INCOME
+                ? 'não é INCOME'
+                : 'desconhecido',
+            type: dto.type,
+            staffId: dto.staffId,
+          },
+        );
       }
 
-      console.log(`[FinanceService.createTransaction] DEBUG - Finalizando createTransaction. Retornando transação.`);
+      console.log(
+        `[FinanceService.createTransaction] DEBUG - Finalizando createTransaction. Retornando transação.`,
+      );
       return transaction;
     });
   }
 
-  async getMedicalFees(tenantId: string, doctorId?: string, startDate?: string, endDate?: string, status?: string) {
+  async getMedicalFees(
+    tenantId: string,
+    doctorId?: string,
+    startDate?: string,
+    endDate?: string,
+    status?: string,
+  ) {
     const where: any = { tenantId };
-    
+
     if (doctorId) {
       where.staffId = doctorId;
     }
@@ -394,27 +515,29 @@ export class FinanceService {
       where: JSON.stringify(where, null, 2),
     });
 
-    const fees = await this.prisma.client.medicalFee.findMany({
-      where,
-      include: {
-        staff: { select: { name: true, specialty: true, crm: true } },
-        transaction: { 
-          select: { 
-            description: true, 
-            amount: true, 
-            createdAt: true,
-            appointment: {
-              include: {
-                patient: { select: { name: true } },
-                procedure: { select: { name: true } },
-                medicalRecord: { select: { id: true, isFinalized: true } },
+    const fees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where,
+        include: {
+          staff: { select: { name: true, specialty: true, crm: true } },
+          transaction: {
+            select: {
+              description: true,
+              amount: true,
+              createdAt: true,
+              appointment: {
+                include: {
+                  patient: { select: { name: true } },
+                  procedure: { select: { name: true } },
+                  medicalRecord: { select: { id: true, isFinalized: true } },
+                },
               },
             },
-          } 
+          },
+          payment: { select: { id: true, paidAt: true, totalAmount: true } },
         },
-        payment: { select: { id: true, paidAt: true, totalAmount: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
+      });
     });
 
     // Filtrar repasses pendentes: apenas mostrar se o appointment tiver prontuário finalizado
@@ -422,7 +545,10 @@ export class FinanceService {
     let filteredFees = fees;
     if (status === 'pending') {
       // Log detalhado antes do filtro
-      console.log('[FinanceService.getMedicalFees] Repasses ANTES do filtro:', fees.length);
+      console.log(
+        '[FinanceService.getMedicalFees] Repasses ANTES do filtro:',
+        fees.length,
+      );
       fees.forEach((fee, index) => {
         console.log(`[FinanceService.getMedicalFees] Repasse ${index + 1}:`, {
           id: fee.id,
@@ -436,34 +562,47 @@ export class FinanceService {
         });
       });
 
-      filteredFees = fees.filter(fee => {
+      filteredFees = fees.filter((fee) => {
         // Se não tem appointment, mostrar (transações sem appointment)
         if (!fee.transaction?.appointment) {
-          console.log(`[FinanceService.getMedicalFees] Repasse ${fee.id} SEM appointment - INCLUINDO`);
+          console.log(
+            `[FinanceService.getMedicalFees] Repasse ${fee.id} SEM appointment - INCLUINDO`,
+          );
           return true;
         }
         // Se tem appointment, só mostrar se tiver prontuário finalizado
         const hasMedicalRecord = !!fee.transaction.appointment.medicalRecord;
-        const isFinalized = fee.transaction.appointment.medicalRecord?.isFinalized === true;
-        
-        console.log(`[FinanceService.getMedicalFees] Repasse ${fee.id} COM appointment:`, {
-          appointmentId: fee.transaction.appointment.id,
-          hasMedicalRecord,
-          isFinalized,
-          willInclude: isFinalized,
-        });
-        
+        const isFinalized =
+          fee.transaction.appointment.medicalRecord?.isFinalized === true;
+
+        console.log(
+          `[FinanceService.getMedicalFees] Repasse ${fee.id} COM appointment:`,
+          {
+            appointmentId: fee.transaction.appointment.id,
+            hasMedicalRecord,
+            isFinalized,
+            willInclude: isFinalized,
+          },
+        );
+
         return isFinalized;
       });
 
-      console.log('[FinanceService.getMedicalFees] Repasses filtrados por prontuário finalizado:', {
-        total: fees.length,
-        comProntuarioFinalizado: filteredFees.length,
-        semProntuarioOuNaoFinalizado: fees.length - filteredFees.length,
-      });
+      console.log(
+        '[FinanceService.getMedicalFees] Repasses filtrados por prontuário finalizado:',
+        {
+          total: fees.length,
+          comProntuarioFinalizado: filteredFees.length,
+          semProntuarioOuNaoFinalizado: fees.length - filteredFees.length,
+        },
+      );
     }
 
-    console.log('[FinanceService.getMedicalFees] Repasses encontrados:', filteredFees.length, 'repasses');
+    console.log(
+      '[FinanceService.getMedicalFees] Repasses encontrados:',
+      filteredFees.length,
+      'repasses',
+    );
     if (filteredFees.length > 0) {
       console.log('[FinanceService.getMedicalFees] Primeiro repasse:', {
         id: filteredFees[0].id,
@@ -474,83 +613,115 @@ export class FinanceService {
         transactionCreatedAt: filteredFees[0].transaction?.createdAt,
         feeCreatedAt: filteredFees[0].createdAt,
         hasAppointment: !!filteredFees[0].transaction?.appointment,
-        isFinalized: filteredFees[0].transaction?.appointment?.medicalRecord?.isFinalized,
+        isFinalized:
+          filteredFees[0].transaction?.appointment?.medicalRecord?.isFinalized,
       });
     } else {
-      console.warn('[FinanceService.getMedicalFees] NENHUM repasse encontrado com os filtros aplicados!');
+      console.warn(
+        '[FinanceService.getMedicalFees] NENHUM repasse encontrado com os filtros aplicados!',
+      );
       if (fees.length > 0) {
-        console.warn('[FinanceService.getMedicalFees] Mas havia', fees.length, 'repasses ANTES do filtro!');
-        console.warn('[FinanceService.getMedicalFees] Isso significa que todos foram filtrados por falta de prontuário finalizado.');
+        console.warn(
+          '[FinanceService.getMedicalFees] Mas havia',
+          fees.length,
+          'repasses ANTES do filtro!',
+        );
+        console.warn(
+          '[FinanceService.getMedicalFees] Isso significa que todos foram filtrados por falta de prontuário finalizado.',
+        );
       }
     }
-    
+
     return filteredFees;
   }
 
-  async closeMedicalFeePayment(tenantId: string, userId: string, dto: CloseMedicalFeePaymentDto) {
+  async closeMedicalFeePayment(
+    tenantId: string,
+    userId: string,
+    dto: CloseMedicalFeePaymentDto,
+  ) {
     const periodStart = new Date(dto.periodStart);
     periodStart.setHours(0, 0, 0, 0);
     const periodEnd = new Date(dto.periodEnd);
     periodEnd.setHours(23, 59, 59, 999);
 
-    console.log('[FinanceService.closeMedicalFeePayment] Iniciando fechamento:', {
-      tenantId,
-      userId,
-      staffId: dto.staffId,
-      periodStart: periodStart.toISOString(),
-      periodEnd: periodEnd.toISOString(),
-    });
+    console.log(
+      '[FinanceService.closeMedicalFeePayment] Iniciando fechamento:',
+      {
+        tenantId,
+        userId,
+        staffId: dto.staffId,
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+      },
+    );
 
     // 1. Verificar se o médico existe e pertence ao tenant
-    const staff = await this.prisma.client.staff.findFirst({
-      where: {
-        id: dto.staffId,
-        tenantId,
-      },
+    const staff = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findFirst({
+        where: {
+          id: dto.staffId,
+          tenantId,
+        },
+      });
     });
 
     if (!staff) {
-      throw new NotFoundException('Médico não encontrado ou não pertence a este tenant.');
+      throw new NotFoundException(
+        'Médico não encontrado ou não pertence a este tenant.',
+      );
     }
 
     // 2. Buscar TODOS os repasses pending do médico (sem filtro de data!)
     // O filtro de data é apenas informativo para o registro de fechamento
-    const pendingFees = await this.prisma.client.medicalFee.findMany({
-      where: {
-        tenantId,
-        staffId: dto.staffId,
-        status: 'pending',
-        // REMOVIDO: filtro de data que causava o erro
-        // Os repasses pendentes devem ser fechados independente da data de criação
-      },
-      include: {
-        transaction: {
-          include: {
-            appointment: {
-              include: {
-                patient: { select: { name: true } },
-                procedure: { select: { name: true } },
-                medicalRecord: { select: { id: true, isFinalized: true } },
+    const pendingFees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where: {
+          tenantId,
+          staffId: dto.staffId,
+          status: 'pending',
+          // REMOVIDO: filtro de data que causava o erro
+          // Os repasses pendentes devem ser fechados independente da data de criação
+        },
+        include: {
+          transaction: {
+            include: {
+              appointment: {
+                include: {
+                  patient: { select: { name: true } },
+                  procedure: { select: { name: true } },
+                  medicalRecord: { select: { id: true, isFinalized: true } },
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
-    console.log('[FinanceService.closeMedicalFeePayment] Repasses pendentes encontrados:', pendingFees.length);
+    console.log(
+      '[FinanceService.closeMedicalFeePayment] Repasses pendentes encontrados:',
+      pendingFees.length,
+    );
 
     if (pendingFees.length === 0) {
-      throw new BadRequestException('Não há repasses pendentes para este médico.');
+      throw new BadRequestException(
+        'Não há repasses pendentes para este médico.',
+      );
     }
 
     // 3. Validar se todos os appointments relacionados têm prontuários finalizados
-    const appointmentsWithIssues: Array<{ id: string; patient: string; procedure: string; reason: string }> = [];
+    const appointmentsWithIssues: Array<{
+      id: string;
+      patient: string;
+      procedure: string;
+      reason: string;
+    }> = [];
 
     for (const fee of pendingFees) {
       const appointment = fee.transaction?.appointment;
-      
+
       // Se não tem appointment, pode fechar normalmente (transação sem appointment)
       if (!appointment) {
         continue;
@@ -558,7 +729,7 @@ export class FinanceService {
 
       // Verificar se tem prontuário
       const medicalRecord = appointment.medicalRecord;
-      
+
       if (!medicalRecord) {
         appointmentsWithIssues.push({
           id: appointment.id,
@@ -578,18 +749,21 @@ export class FinanceService {
 
     if (appointmentsWithIssues.length > 0) {
       const appointmentsList = appointmentsWithIssues
-        .map(a => `${a.procedure} - ${a.patient} (${a.reason})`)
+        .map((a) => `${a.procedure} - ${a.patient} (${a.reason})`)
         .join('; ');
 
       throw new BadRequestException(
         `Não é possível fechar o repasse. Os seguintes atendimentos precisam ter o prontuário criado e finalizado: ${appointmentsList}. ` +
-        `Por favor, crie e finalize os prontuários antes de fechar o repasse.`
+          `Por favor, crie e finalize os prontuários antes de fechar o repasse.`,
       );
     }
 
     // 4. Calcular total e período real dos repasses
-    const totalAmount = pendingFees.reduce((acc, fee) => acc + Number(fee.feeAmount), 0);
-    
+    const totalAmount = pendingFees.reduce(
+      (acc, fee) => acc + Number(fee.feeAmount),
+      0,
+    );
+
     // Usar o período real dos repasses (primeiro e último)
     const realPeriodStart = pendingFees[0].createdAt;
     const realPeriodEnd = pendingFees[pendingFees.length - 1].createdAt;
@@ -602,17 +776,19 @@ export class FinanceService {
     });
 
     // 5. Usar transação atômica para criar fechamento e atualizar repasses
-    const payment = await this.prisma.client.$transaction(async (tx) => {
+    const payment = await this.prisma.withTenant(tenantId, async (tx) => {
       // Verificar novamente dentro da transação se os repasses ainda estão pendentes
       const feesInTx = await tx.medicalFee.findMany({
         where: {
-          id: { in: pendingFees.map(f => f.id) },
+          id: { in: pendingFees.map((f) => f.id) },
           status: 'pending',
         },
       });
 
       if (feesInTx.length !== pendingFees.length) {
-        throw new BadRequestException('Alguns repasses já foram fechados. Por favor, recarregue a página e tente novamente.');
+        throw new BadRequestException(
+          'Alguns repasses já foram fechados. Por favor, recarregue a página e tente novamente.',
+        );
       }
 
       // Criar registro de fechamento dentro da transação
@@ -634,7 +810,7 @@ export class FinanceService {
       // Atualizar todos os repasses para 'paid' e vincular ao pagamento dentro da transação
       await tx.medicalFee.updateMany({
         where: {
-          id: { in: pendingFees.map(f => f.id) },
+          id: { in: pendingFees.map((f) => f.id) },
         },
         data: {
           status: 'paid',
@@ -647,31 +823,38 @@ export class FinanceService {
     });
 
     // 6. Retornar o fechamento com detalhes
-    return this.prisma.client.medicalFeePayment.findUnique({
-      where: { id: payment.id },
-      include: {
-        staff: { select: { name: true, specialty: true, crm: true } },
-        paidByUser: { select: { id: true, name: true, email: true } },
-        fees: {
-          include: {
-            transaction: {
-              include: {
-                appointment: {
-                  include: {
-                    patient: { select: { name: true } },
-                    procedure: { select: { name: true } },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFeePayment.findUnique({
+        where: { id: payment.id },
+        include: {
+          staff: { select: { name: true, specialty: true, crm: true } },
+          paidByUser: { select: { id: true, name: true, email: true } },
+          fees: {
+            include: {
+              transaction: {
+                include: {
+                  appointment: {
+                    include: {
+                      patient: { select: { name: true } },
+                      procedure: { select: { name: true } },
+                    },
                   },
                 },
               },
             },
+            orderBy: { createdAt: 'asc' },
           },
-          orderBy: { createdAt: 'asc' },
         },
-      },
+      });
     });
   }
 
-  async getMedicalFeePayments(tenantId: string, staffId?: string, startDate?: string, endDate?: string) {
+  async getMedicalFeePayments(
+    tenantId: string,
+    staffId?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
     const where: any = { tenantId };
 
     if (staffId) {
@@ -693,54 +876,68 @@ export class FinanceService {
       }
     }
 
-    console.log('[FinanceService.getMedicalFeePayments] Buscando com filtros:', {
-      tenantId,
-      staffId,
-      startDate,
-      endDate,
-      whereClause: JSON.stringify(where),
-    });
+    console.log(
+      '[FinanceService.getMedicalFeePayments] Buscando com filtros:',
+      {
+        tenantId,
+        staffId,
+        startDate,
+        endDate,
+        whereClause: JSON.stringify(where),
+      },
+    );
 
-    const payments = await this.prisma.client.medicalFeePayment.findMany({
-      where,
-      include: {
-        staff: { select: { name: true, specialty: true, crm: true } },
-        paidByUser: { select: { id: true, name: true, email: true } },
-        fees: {
-          include: {
-            transaction: {
-              include: {
-                appointment: {
-                  include: {
-                    patient: { select: { name: true } },
-                    procedure: { select: { name: true } },
+    const payments = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFeePayment.findMany({
+        where,
+        include: {
+          staff: { select: { name: true, specialty: true, crm: true } },
+          paidByUser: { select: { id: true, name: true, email: true } },
+          fees: {
+            include: {
+              transaction: {
+                include: {
+                  appointment: {
+                    include: {
+                      patient: { select: { name: true } },
+                      procedure: { select: { name: true } },
+                    },
                   },
                 },
               },
             },
+            orderBy: { createdAt: 'asc' },
           },
-          orderBy: { createdAt: 'asc' },
         },
-      },
-      orderBy: { paidAt: 'desc' },
+        orderBy: { paidAt: 'desc' },
+      });
     });
 
-    console.log('[FinanceService.getMedicalFeePayments] Encontrados:', payments.length, 
-      'pagamentos. Datas:', payments.map(p => ({ id: p.id, paidAt: p.paidAt })));
+    console.log(
+      '[FinanceService.getMedicalFeePayments] Encontrados:',
+      payments.length,
+      'pagamentos. Datas:',
+      payments.map((p) => ({ id: p.id, paidAt: p.paidAt })),
+    );
 
     return payments;
   }
 
   async getMedicalFeeSummary(tenantId: string, doctorId: string) {
-    const fees = await this.prisma.client.medicalFee.findMany({
-      where: {
-        tenantId,
-        staffId: doctorId,
-        status: 'pending',
-      },
+    const fees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where: {
+          tenantId,
+          staffId: doctorId,
+          status: 'pending',
+        },
+      });
     });
 
-    const totalPending = fees.reduce((acc: number, fee: any) => acc + Number(fee.feeAmount), 0);
+    const totalPending = fees.reduce(
+      (acc: number, fee: any) => acc + Number(fee.feeAmount),
+      0,
+    );
 
     return {
       doctorId,
@@ -750,21 +947,23 @@ export class FinanceService {
   }
 
   async updateTransaction(
-    tenantId: string, 
-    transactionId: string, 
-    dto: UpdateTransactionDto, 
-    userId?: string, 
-    userRole?: string
+    tenantId: string,
+    transactionId: string,
+    dto: UpdateTransactionDto,
+    userId?: string,
+    userRole?: string,
   ) {
     // 1. Verificar se a transação existe e pertence ao tenant
-    const transaction = await this.prisma.client.transaction.findFirst({
-      where: { 
-        id: transactionId, 
-        tenantId 
-      },
-      include: {
-        medicalFee: true,
-      }
+    const transaction = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findFirst({
+        where: {
+          id: transactionId,
+          tenantId,
+        },
+        include: {
+          medicalFee: true,
+        },
+      });
     });
 
     if (!transaction) {
@@ -774,175 +973,215 @@ export class FinanceService {
     // 2. Verificar imutabilidade: se o caixa do dia foi fechado, não permitir edição
     const transactionDate = new Date(transaction.createdAt);
     transactionDate.setHours(0, 0, 0, 0);
-    
+
     // Converter para UTC para comparação com o campo date (DATE type)
     const [year, month, day] = [
       transactionDate.getFullYear(),
       transactionDate.getMonth() + 1,
-      transactionDate.getDate()
+      transactionDate.getDate(),
     ];
     const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
     // Verificar fechamento administrativo (bloqueia TODAS as transações do dia)
-    const adminClosure = await this.prisma.client.dailyClosure.findFirst({
-      where: {
-        tenantId,
-        date: targetDate,
-        closureType: 'ADMIN',
-      },
-    });
-
-    if (adminClosure) {
-      throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.');
-    }
-
-    // Se for recepcionista, verificar fechamento do próprio caixa
-    if (userRole === UserRole.RECEPTIONIST && userId) {
-      const receptionistClosure = await this.prisma.client.dailyClosure.findFirst({
-        where: {
-          tenantId,
-          date: targetDate,
-          createdById: userId,
-          closureType: 'RECEPTIONIST',
-        },
-      });
-
-      if (receptionistClosure) {
-        throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.');
-      }
-
-      // Recepcionista só pode editar transações que ele criou
-      if (transaction.createdById !== userId) {
-        throw new ForbiddenException('Você só pode editar transações criadas por você.');
-      }
-    }
-
-    // 3. Não permitir editar transações com repasse pago (imutabilidade financeira)
-    if (transaction.medicalFee && transaction.medicalFee.status === 'paid') {
-      throw new BadRequestException('Não é possível editar uma transação com repasse médico já pago. Para alterar, é necessário criar um estorno oficial.');
-    }
-
-    // 4. Usar transação atômica para atualizar transação e repasse (se necessário)
-    const updatedTransaction = await this.prisma.client.$transaction(async (tx) => {
-      // Verificar novamente dentro da transação (double-check para evitar race conditions)
-      const transactionInTx = await tx.transaction.findUnique({
-        where: { id: transactionId },
-        include: { medicalFee: true },
-      });
-
-      if (!transactionInTx) {
-        throw new NotFoundException('Transação não encontrada');
-      }
-
-      // Verificar novamente se o caixa foi fechado (dentro da transação)
-      const adminClosureInTx = await tx.dailyClosure.findFirst({
+    const adminClosure = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
         where: {
           tenantId,
           date: targetDate,
           closureType: 'ADMIN',
         },
       });
+    });
 
-      if (adminClosureInTx) {
-        throw new BadRequestException('O caixa administrativo deste dia já foi fechado. Não é possível editar transações.');
+    if (adminClosure) {
+      throw new BadRequestException(
+        'O caixa administrativo deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.',
+      );
+    }
+
+    // Se for recepcionista, verificar fechamento do próprio caixa
+    if (userRole === UserRole.RECEPTIONIST && userId) {
+      const receptionistClosure = await this.prisma.withTenant(
+        tenantId,
+        async (tx) => {
+          return tx.dailyClosure.findFirst({
+            where: {
+              tenantId,
+              date: targetDate,
+              createdById: userId,
+              closureType: 'RECEPTIONIST',
+            },
+          });
+        },
+      );
+
+      if (receptionistClosure) {
+        throw new BadRequestException(
+          'Seu caixa deste dia já foi fechado. Não é possível editar transações. Para alterar, é necessário reabrir o caixa ou criar um estorno oficial.',
+        );
       }
 
-      if (userRole === UserRole.RECEPTIONIST && userId) {
-        const receptionistClosureInTx = await tx.dailyClosure.findFirst({
+      // Recepcionista só pode editar transações que ele criou
+      if (transaction.createdById !== userId) {
+        throw new ForbiddenException(
+          'Você só pode editar transações criadas por você.',
+        );
+      }
+    }
+
+    // 3. Não permitir editar transações com repasse pago (imutabilidade financeira)
+    if (transaction.medicalFee && transaction.medicalFee.status === 'paid') {
+      throw new BadRequestException(
+        'Não é possível editar uma transação com repasse médico já pago. Para alterar, é necessário criar um estorno oficial.',
+      );
+    }
+
+    // 4. Usar transação atômica para atualizar transação e repasse (se necessário)
+    const updatedTransaction = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        // Verificar novamente dentro da transação (double-check para evitar race conditions)
+        const transactionInTx = await tx.transaction.findUnique({
+          where: { id: transactionId },
+          include: { medicalFee: true },
+        });
+
+        if (!transactionInTx) {
+          throw new NotFoundException('Transação não encontrada');
+        }
+
+        // Verificar novamente se o caixa foi fechado (dentro da transação)
+        const adminClosureInTx = await tx.dailyClosure.findFirst({
           where: {
             tenantId,
             date: targetDate,
-            createdById: userId,
-            closureType: 'RECEPTIONIST',
+            closureType: 'ADMIN',
           },
         });
 
-        if (receptionistClosureInTx) {
-          throw new BadRequestException('Seu caixa deste dia já foi fechado. Não é possível editar transações.');
+        if (adminClosureInTx) {
+          throw new BadRequestException(
+            'O caixa administrativo deste dia já foi fechado. Não é possível editar transações.',
+          );
         }
-      }
 
-      // Atualizar a transação dentro da transação
-      const updated = await tx.transaction.update({
-        where: { id: transactionId },
-        data: {
-          category: dto.category !== undefined ? dto.category : undefined,
-          amount: dto.amount !== undefined ? dto.amount : undefined,
-          method: dto.method !== undefined ? dto.method : undefined,
-          description: dto.description !== undefined ? dto.description : undefined,
-          categoryId: dto.categoryId !== undefined ? dto.categoryId : undefined,
-        },
-        include: {
-          patient: { select: { name: true } },
-          appointment: {
-            include: {
-              patient: { select: { name: true } },
-              procedure: { select: { name: true } },
-            },
-          },
-          createdBy: { select: { id: true, name: true, email: true } },
-        },
-      });
-
-      // 5. Se o valor mudou, atualizar o repasse médico dentro da mesma transação
-      if (dto.amount !== undefined && transactionInTx.medicalFee && transactionInTx.medicalFee.status === 'pending') {
-        // Buscar configuração do médico para recalcular o repasse
-        const staff = await tx.staff.findUnique({
-          where: { id: transactionInTx.medicalFee.staffId },
-        });
-
-        if (staff) {
-          const commissionType = staff.commissionType || 'PERCENTAGE';
-          let newFeeAmount = 0;
-
-          if (commissionType === 'FIXED') {
-            newFeeAmount = Number(staff.fixedCommission || 0);
-          } else {
-            const rate = Number(staff.commissionRate || 0);
-            newFeeAmount = (Number(dto.amount) * rate) / 100;
-          }
-
-          await tx.medicalFee.update({
-            where: { id: transactionInTx.medicalFee.id },
-            data: {
-              grossAmount: dto.amount,
-              feeAmount: newFeeAmount,
+        if (userRole === UserRole.RECEPTIONIST && userId) {
+          const receptionistClosureInTx = await tx.dailyClosure.findFirst({
+            where: {
+              tenantId,
+              date: targetDate,
+              createdById: userId,
+              closureType: 'RECEPTIONIST',
             },
           });
+
+          if (receptionistClosureInTx) {
+            throw new BadRequestException(
+              'Seu caixa deste dia já foi fechado. Não é possível editar transações.',
+            );
+          }
         }
-      }
 
-      return updated;
-    });
+        // Atualizar a transação dentro da transação
+        const updated = await tx.transaction.update({
+          where: { id: transactionId },
+          data: {
+            category: dto.category !== undefined ? dto.category : undefined,
+            amount: dto.amount !== undefined ? dto.amount : undefined,
+            method: dto.method !== undefined ? dto.method : undefined,
+            description:
+              dto.description !== undefined ? dto.description : undefined,
+            categoryId:
+              dto.categoryId !== undefined ? dto.categoryId : undefined,
+          },
+          include: {
+            patient: { select: { name: true } },
+            appointment: {
+              include: {
+                patient: { select: { name: true } },
+                procedure: { select: { name: true } },
+              },
+            },
+            createdBy: { select: { id: true, name: true, email: true } },
+          },
+        });
 
-    console.log(`[FinanceService] Transação ${transactionId} atualizada com sucesso`);
+        // 5. Se o valor mudou, atualizar o repasse médico dentro da mesma transação
+        if (
+          dto.amount !== undefined &&
+          transactionInTx.medicalFee &&
+          transactionInTx.medicalFee.status === 'pending'
+        ) {
+          // Buscar configuração do médico para recalcular o repasse
+          const staff = await tx.staff.findUnique({
+            where: { id: transactionInTx.medicalFee.staffId },
+          });
+
+          if (staff) {
+            const commissionType = staff.commissionType || 'PERCENTAGE';
+            let newFeeAmount = 0;
+
+            if (commissionType === 'FIXED') {
+              newFeeAmount = Number(staff.fixedCommission || 0);
+            } else {
+              const rate = Number(staff.commissionRate || 0);
+              newFeeAmount = (Number(dto.amount) * rate) / 100;
+            }
+
+            await tx.medicalFee.update({
+              where: { id: transactionInTx.medicalFee.id },
+              data: {
+                grossAmount: dto.amount,
+                feeAmount: newFeeAmount,
+              },
+            });
+          }
+        }
+
+        return updated;
+      },
+    );
+
+    console.log(
+      `[FinanceService] Transação ${transactionId} atualizada com sucesso`,
+    );
 
     return updatedTransaction;
   }
 
-  async getDailyTransactions(tenantId: string, date?: string, createdById?: string) {
+  async getDailyTransactions(
+    tenantId: string,
+    date?: string,
+    createdById?: string,
+  ) {
     // Parse da data e criar range no horário de Brasília (UTC-3)
     // Isso garante consistência com o fechamento de caixa
     let year: number, month: number, day: number;
-    
+
     if (date) {
       [year, month, day] = date.split('-').map(Number);
     } else {
       const now = new Date();
       // Ajustar para horário de Brasília
-      const brDate = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+      const brDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
       year = brDate.getUTCFullYear();
       month = brDate.getUTCMonth() + 1;
       day = brDate.getUTCDate();
     }
-    
+
     // Criar range no horário de Brasília convertido para UTC
     // Brasília = UTC-3, então meia-noite em Brasília = 03:00 UTC
     const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
+    const endOfDay = new Date(
+      Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999),
+    );
 
-    console.log(`[FinanceService] Buscando transações para tenant ${tenantId}, data: ${date || 'hoje'}`);
-    console.log(`[FinanceService] Range (Brasília): ${startOfDay.toISOString()} até ${endOfDay.toISOString()}`);
+    console.log(
+      `[FinanceService] Buscando transações para tenant ${tenantId}, data: ${date || 'hoje'}`,
+    );
+    console.log(
+      `[FinanceService] Range (Brasília): ${startOfDay.toISOString()} até ${endOfDay.toISOString()}`,
+    );
 
     const where: any = {
       tenantId,
@@ -955,50 +1194,66 @@ export class FinanceService {
     // Filtrar por recepcionista se fornecido
     if (createdById) {
       where.createdById = createdById;
-      console.log(`[FinanceService] Filtrando por recepcionista: ${createdById}`);
+      console.log(
+        `[FinanceService] Filtrando por recepcionista: ${createdById}`,
+      );
     }
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where,
-      include: {
-        patient: { select: { name: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true } },
-            staff: { select: { id: true, name: true, specialty: true } },
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where,
+        include: {
+          patient: { select: { name: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true } },
+              staff: { select: { id: true, name: true, specialty: true } },
+            },
           },
+          createdBy: { select: { id: true, name: true, email: true } },
         },
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
+      });
     });
 
-    console.log(`[FinanceService] Encontradas ${transactions.length} transações`);
+    console.log(
+      `[FinanceService] Encontradas ${transactions.length} transações`,
+    );
     // Log para debug: verificar se description está vindo
     if (transactions.length > 0) {
       console.log(`[FinanceService] Primeira transação:`, {
         id: transactions[0].id,
         description: transactions[0].description,
-        appointment: transactions[0].appointment ? {
-          id: transactions[0].appointment.id,
-          patient: transactions[0].appointment.patient?.name,
-        } : null,
+        appointment: transactions[0].appointment
+          ? {
+              id: transactions[0].appointment.id,
+              patient: transactions[0].appointment.patient?.name,
+            }
+          : null,
       });
     }
     return transactions;
   }
 
-  async closeReceptionistBox(tenantId: string, userId: string, dto: CloseReceptionistBoxDto) {
-    console.log(`[FinanceService.closeReceptionistBox] Iniciando fechamento para data: ${dto.date}, userId: ${userId}`);
-    
+  async closeReceptionistBox(
+    tenantId: string,
+    userId: string,
+    dto: CloseReceptionistBoxDto,
+  ) {
+    console.log(
+      `[FinanceService.closeReceptionistBox] Iniciando fechamento para data: ${dto.date}, userId: ${userId}`,
+    );
+
     // Criar datas em UTC para evitar problemas de timezone
     const [year, month, day] = dto.date.split('-').map(Number);
     const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-    
+
     // Para busca de transações, usar horário de Brasília convertido para UTC
     // Brasília = UTC-3, então meia-noite em Brasília = 03:00 UTC
     const startOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-    const endOfDayUTC = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
+    const endOfDayUTC = new Date(
+      Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999),
+    );
 
     console.log(`[FinanceService.closeReceptionistBox] Datas calculadas:`, {
       inputDate: dto.date,
@@ -1008,31 +1263,40 @@ export class FinanceService {
     });
 
     // 1. Verificar se já existe fechamento para este recepcionista neste dia
-    const existing = await this.prisma.client.dailyClosure.findFirst({
-      where: {
-        tenantId,
-        date: targetDate, // Comparação exata - yyyy-MM-dd meia-noite UTC
-        createdById: userId,
-        closureType: 'RECEPTIONIST',
-      },
+    const existing = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: {
+          tenantId,
+          date: targetDate, // Comparação exata - yyyy-MM-dd meia-noite UTC
+          createdById: userId,
+          closureType: 'RECEPTIONIST',
+        },
+      });
     });
 
     if (existing) {
-      console.log(`[FinanceService.closeReceptionistBox] Fechamento já existe:`, existing.id, 'para data:', existing.date);
+      console.log(
+        `[FinanceService.closeReceptionistBox] Fechamento já existe:`,
+        existing.id,
+        'para data:',
+        existing.date,
+      );
       throw new BadRequestException('Seu caixa deste dia já está fechado.');
     }
 
     // 2. Calcular totais do dia para este recepcionista
-    const transactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        createdById: userId,
-        createdAt: {
-          gte: startOfDayUTC,
-          lte: endOfDayUTC,
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where: {
+          tenantId,
+          createdById: userId,
+          createdAt: {
+            gte: startOfDayUTC,
+            lte: endOfDayUTC,
+          },
+          status: 'completed',
         },
-        status: 'completed',
-      },
+      });
     });
 
     let totalIncome = 0;
@@ -1061,7 +1325,7 @@ export class FinanceService {
 
     // Usar transação atômica para garantir integridade
     try {
-      const closure = await this.prisma.client.$transaction(async (tx) => {
+      const closure = await this.prisma.withTenant(tenantId, async (tx) => {
         // Verificar novamente dentro da transação (double-check)
         const existingInTx = await tx.dailyClosure.findFirst({
           where: {
@@ -1099,11 +1363,17 @@ export class FinanceService {
           },
         });
       });
-      
-      console.log(`[FinanceService.closeReceptionistBox] Fechamento criado com sucesso:`, closure.id);
+
+      console.log(
+        `[FinanceService.closeReceptionistBox] Fechamento criado com sucesso:`,
+        closure.id,
+      );
       return closure;
     } catch (error: any) {
-      console.error(`[FinanceService.closeReceptionistBox] Erro ao criar fechamento:`, error);
+      console.error(
+        `[FinanceService.closeReceptionistBox] Erro ao criar fechamento:`,
+        error,
+      );
       if (error.code === 'P2002' || error instanceof BadRequestException) {
         throw new BadRequestException('Seu caixa deste dia já está fechado.');
       }
@@ -1112,18 +1382,22 @@ export class FinanceService {
   }
 
   async closeAdminBox(tenantId: string, userId: string, dto: CloseAdminBoxDto) {
-    console.log(`[FinanceService.closeAdminBox] Iniciando fechamento para data: ${dto.date}`);
-    
+    console.log(
+      `[FinanceService.closeAdminBox] Iniciando fechamento para data: ${dto.date}`,
+    );
+
     // Criar datas em UTC para evitar problemas de timezone
     // O dto.date vem como 'yyyy-MM-dd', criamos em UTC meia-noite
     const [year, month, day] = dto.date.split('-').map(Number);
     const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-    
+
     // Para busca de transações, usar horário de Brasília convertido para UTC
     // Brasília = UTC-3, então meia-noite em Brasília = 03:00 UTC
     const startOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-    const endOfDayUTC = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
-    
+    const endOfDayUTC = new Date(
+      Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999),
+    );
+
     console.log(`[FinanceService.closeAdminBox] Datas calculadas:`, {
       inputDate: dto.date,
       targetDate: targetDate.toISOString(),
@@ -1133,33 +1407,46 @@ export class FinanceService {
 
     // 1. Verificar se já existe fechamento administrativo para este dia/tenant
     // Usando comparação exata de data (o campo date é DATE, não TIMESTAMP)
-    const existing = await this.prisma.client.dailyClosure.findFirst({
-      where: {
-        tenantId,
-        date: targetDate, // Comparação exata - yyyy-MM-dd meia-noite UTC
-        closureType: 'ADMIN',
-      },
+    const existing = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: {
+          tenantId,
+          date: targetDate, // Comparação exata - yyyy-MM-dd meia-noite UTC
+          closureType: 'ADMIN',
+        },
+      });
     });
 
     if (existing) {
-      console.log(`[FinanceService.closeAdminBox] Fechamento já existe:`, existing.id, 'para data:', existing.date);
-      throw new BadRequestException('O caixa administrativo deste dia já está fechado.');
+      console.log(
+        `[FinanceService.closeAdminBox] Fechamento já existe:`,
+        existing.id,
+        'para data:',
+        existing.date,
+      );
+      throw new BadRequestException(
+        'O caixa administrativo deste dia já está fechado.',
+      );
     }
 
     // 2. Calcular totais do dia (todas as transações do tenant, não apenas do admin)
     // Transações são filtradas pelo horário de Brasília (createdAt)
-    const transactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        createdAt: {
-          gte: startOfDayUTC,
-          lte: endOfDayUTC,
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where: {
+          tenantId,
+          createdAt: {
+            gte: startOfDayUTC,
+            lte: endOfDayUTC,
+          },
+          status: 'completed',
         },
-        status: 'completed',
-      },
+      });
     });
 
-    console.log(`[FinanceService.closeAdminBox] Encontradas ${transactions.length} transações`);
+    console.log(
+      `[FinanceService.closeAdminBox] Encontradas ${transactions.length} transações`,
+    );
 
     let totalIncome = 0;
     let totalExpense = 0;
@@ -1187,7 +1474,7 @@ export class FinanceService {
 
     // Usar transação atômica para garantir integridade
     try {
-      const closure = await this.prisma.client.$transaction(async (tx) => {
+      const closure = await this.prisma.withTenant(tenantId, async (tx) => {
         // Verificar novamente dentro da transação (double-check)
         const existingInTx = await tx.dailyClosure.findFirst({
           where: {
@@ -1198,7 +1485,9 @@ export class FinanceService {
         });
 
         if (existingInTx) {
-          throw new BadRequestException('O caixa administrativo deste dia já está fechado.');
+          throw new BadRequestException(
+            'O caixa administrativo deste dia já está fechado.',
+          );
         }
 
         // Criar fechamento dentro da transação
@@ -1224,13 +1513,21 @@ export class FinanceService {
           },
         });
       });
-      
-      console.log(`[FinanceService.closeAdminBox] Fechamento criado com sucesso:`, closure.id);
+
+      console.log(
+        `[FinanceService.closeAdminBox] Fechamento criado com sucesso:`,
+        closure.id,
+      );
       return closure;
     } catch (error: any) {
-      console.error(`[FinanceService.closeAdminBox] Erro ao criar fechamento:`, error);
+      console.error(
+        `[FinanceService.closeAdminBox] Erro ao criar fechamento:`,
+        error,
+      );
       if (error.code === 'P2002' || error instanceof BadRequestException) {
-        throw new BadRequestException('O caixa administrativo deste dia já está fechado.');
+        throw new BadRequestException(
+          'O caixa administrativo deste dia já está fechado.',
+        );
       }
       throw error;
     }
@@ -1242,12 +1539,14 @@ export class FinanceService {
     targetDate.setHours(0, 0, 0, 0);
 
     // 1. Verificar se já existe fechamento
-    const existing = await this.prisma.client.dailyClosure.findFirst({
-      where: {
-        tenantId,
-        date: targetDate,
-        createdById: dto.closedById,
-      },
+    const existing = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: {
+          tenantId,
+          date: targetDate,
+          createdById: dto.closedById,
+        },
+      });
     });
 
     if (existing) {
@@ -1259,15 +1558,17 @@ export class FinanceService {
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where: {
+          tenantId,
+          createdAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+          status: 'completed',
         },
-        status: 'completed',
-      },
+      });
     });
 
     let totalIncome = 0;
@@ -1281,23 +1582,30 @@ export class FinanceService {
       }
     });
 
-    return this.prisma.client.dailyClosure.create({
-      data: {
-        tenantId,
-        date: targetDate,
-        createdById: dto.closedById,
-        closureType: 'ADMIN', // Default para compatibilidade
-        initialBalance: 0,
-        finalBalance: totalIncome - totalExpense,
-        totalIncome,
-        totalExpense,
-        netBalance: totalIncome - totalExpense,
-        observations: dto.observations,
-      },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.create({
+        data: {
+          tenantId,
+          date: targetDate,
+          createdById: dto.closedById,
+          closureType: 'ADMIN', // Default para compatibilidade
+          initialBalance: 0,
+          finalBalance: totalIncome - totalExpense,
+          totalIncome,
+          totalExpense,
+          netBalance: totalIncome - totalExpense,
+          observations: dto.observations,
+        },
+      });
     });
   }
 
-  async getClosureStatus(tenantId: string, date: string, userId?: string, closureType?: string) {
+  async getClosureStatus(
+    tenantId: string,
+    date: string,
+    userId?: string,
+    closureType?: string,
+  ) {
     // Criar data em UTC para comparação com o campo date (DATE type)
     // O campo date armazena apenas yyyy-MM-dd, que o Prisma retorna como meia-noite UTC
     const [year, month, day] = date.split('-').map(Number);
@@ -1305,31 +1613,35 @@ export class FinanceService {
 
     if (userId && closureType) {
       // Buscar fechamento específico
-      return this.prisma.client.dailyClosure.findUnique({
-        where: {
-          tenantId_date_createdById_closureType: {
-            tenantId,
-            date: targetDate,
-            createdById: userId,
-            closureType: closureType as 'RECEPTIONIST' | 'ADMIN',
+      return this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.dailyClosure.findUnique({
+          where: {
+            tenantId_date_createdById_closureType: {
+              tenantId,
+              date: targetDate,
+              createdById: userId,
+              closureType: closureType as 'RECEPTIONIST' | 'ADMIN',
+            },
           },
-        },
-        include: {
-          closedBy: { select: { id: true, name: true, email: true } },
-        },
+          include: {
+            closedBy: { select: { id: true, name: true, email: true } },
+          },
+        });
       });
     }
 
     // Buscar todos os fechamentos do dia
-    return this.prisma.client.dailyClosure.findMany({
-      where: {
-        tenantId,
-        date: targetDate,
-      },
-      include: {
-        closedBy: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findMany({
+        where: {
+          tenantId,
+          date: targetDate,
+        },
+        include: {
+          closedBy: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     });
   }
 
@@ -1339,7 +1651,12 @@ export class FinanceService {
     // Para comparação com DailyClosure.date (DATE type), usar meia-noite UTC
     const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
-    console.log('[FinanceService.getBoxStatus] Iniciando para:', { tenantId, date, userId, targetDate: targetDate.toISOString() });
+    console.log('[FinanceService.getBoxStatus] Iniciando para:', {
+      tenantId,
+      date,
+      userId,
+      targetDate: targetDate.toISOString(),
+    });
 
     const where: any = {
       tenantId,
@@ -1351,12 +1668,16 @@ export class FinanceService {
       where.createdById = userId;
     }
 
-    const closures = await this.prisma.client.dailyClosure.findMany({
-      where,
-      include: {
-        closedBy: { select: { id: true, name: true, email: true, role: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+    const closures = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findMany({
+        where,
+        include: {
+          closedBy: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     });
 
     // Buscar último fechamento anterior à data atual (não apenas do dia anterior)
@@ -1366,17 +1687,19 @@ export class FinanceService {
       tenantId,
       date: { lt: targetDate }, // Qualquer data anterior à data atual
     };
-    
+
     // Para closures, usar createdById e closureType
     if (userId) {
       lastClosureWhere.createdById = userId;
       // Determinar closureType baseado no usuário (será filtrado depois se necessário)
     }
 
-    const lastClosure = await this.prisma.client.dailyClosure.findFirst({
-      where: lastClosureWhere,
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], // Último por data, depois por criação
-      select: { cashCount: true, closureType: true, createdById: true },
+    const lastClosure = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: lastClosureWhere,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], // Último por data, depois por criação
+        select: { cashCount: true, closureType: true, createdById: true },
+      });
     });
 
     // Saldo inicial é apenas o dinheiro do último fechamento (cashCount)
@@ -1385,14 +1708,18 @@ export class FinanceService {
     }
 
     // Separar por tipo
-    const receptionistClosures = closures.filter(c => c.closureType === 'RECEPTIONIST');
-    const adminClosures = closures.filter(c => c.closureType === 'ADMIN');
+    const receptionistClosures = closures.filter(
+      (c) => c.closureType === 'RECEPTIONIST',
+    );
+    const adminClosures = closures.filter((c) => c.closureType === 'ADMIN');
 
     // Buscar transações do dia para calcular saldos por método
     // Usar mesmo range de horário de Brasília (UTC-3) que getDailyTransactions e fechamento
     const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
-    
+    const endOfDay = new Date(
+      Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999),
+    );
+
     const transactionWhere: any = {
       tenantId,
       createdAt: {
@@ -1400,23 +1727,36 @@ export class FinanceService {
         lte: endOfDay,
       },
     };
-    
+
     // Usar createdById para filtrar por usuário (mesmo campo usado em getTransactions)
     if (userId) {
       transactionWhere.createdById = userId;
     }
 
-    console.log('[FinanceService.getBoxStatus] Query para transações:', JSON.stringify(transactionWhere, null, 2));
-    console.log('[FinanceService.getBoxStatus] Range:', startOfDay.toISOString(), 'até', endOfDay.toISOString());
+    console.log(
+      '[FinanceService.getBoxStatus] Query para transações:',
+      JSON.stringify(transactionWhere, null, 2),
+    );
+    console.log(
+      '[FinanceService.getBoxStatus] Range:',
+      startOfDay.toISOString(),
+      'até',
+      endOfDay.toISOString(),
+    );
 
-    const dayTransactions = await this.prisma.client.transaction.findMany({
-      where: transactionWhere,
-      select: {
-        type: true,
-        amount: true,
-        method: true,
+    const dayTransactions = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: transactionWhere,
+          select: {
+            type: true,
+            amount: true,
+            method: true,
+          },
+        });
       },
-    });
+    );
 
     // Calcular saldos por método de pagamento
     const balancesByMethod: any = {
@@ -1426,31 +1766,42 @@ export class FinanceService {
       'Cartão de Crédito': { income: 0, expense: 0 },
     };
 
-    console.log('[FinanceService.getBoxStatus] Transações do dia para cálculo de saldos:', dayTransactions.length);
-    
+    console.log(
+      '[FinanceService.getBoxStatus] Transações do dia para cálculo de saldos:',
+      dayTransactions.length,
+    );
+
     dayTransactions.forEach((t: any, index: number) => {
       const method = t.method || 'Dinheiro';
       const amount = Number(t.amount || 0);
       const typeUpper = t.type?.toUpperCase();
-      
+
       console.log(`[FinanceService.getBoxStatus] Transação ${index + 1}:`, {
         type: t.type,
         typeUpper,
         method,
         amount,
       });
-      
+
       if (balancesByMethod[method]) {
         if (typeUpper === 'INCOME') {
           balancesByMethod[method].income += amount;
-          console.log(`[FinanceService.getBoxStatus] +${amount} entrada em ${method}`);
+          console.log(
+            `[FinanceService.getBoxStatus] +${amount} entrada em ${method}`,
+          );
         } else if (typeUpper === 'EXPENSE') {
           balancesByMethod[method].expense += amount;
-          console.log(`[FinanceService.getBoxStatus] +${amount} saída em ${method}`);
+          console.log(
+            `[FinanceService.getBoxStatus] +${amount} saída em ${method}`,
+          );
         }
       } else {
         // Se o método não está no mapa, adicionar a 'Dinheiro' como fallback
-        console.log('[FinanceService.getBoxStatus] Método não mapeado:', method, '- adicionando a Dinheiro');
+        console.log(
+          '[FinanceService.getBoxStatus] Método não mapeado:',
+          method,
+          '- adicionando a Dinheiro',
+        );
         if (typeUpper === 'INCOME') {
           balancesByMethod['Dinheiro'].income += amount;
         } else if (typeUpper === 'EXPENSE') {
@@ -1458,8 +1809,11 @@ export class FinanceService {
         }
       }
     });
-    
-    console.log('[FinanceService.getBoxStatus] Saldos calculados FINAL:', JSON.stringify(balancesByMethod));
+
+    console.log(
+      '[FinanceService.getBoxStatus] Saldos calculados FINAL:',
+      JSON.stringify(balancesByMethod),
+    );
 
     return {
       date: targetDate,
@@ -1467,7 +1821,9 @@ export class FinanceService {
       adminClosures,
       hasReceptionistClosure: receptionistClosures.length > 0,
       hasAdminClosure: adminClosures.length > 0,
-      userClosure: userId ? closures.find(c => c.createdById === userId) : null,
+      userClosure: userId
+        ? closures.find((c) => c.createdById === userId)
+        : null,
       previousDayFinalBalance,
       balancesByMethod,
     };
@@ -1475,19 +1831,26 @@ export class FinanceService {
 
   async checkAppointmentBilling(tenantId: string, appointmentId: string) {
     // Verificar se já existe transação para este appointment
-    const existingTransaction = await this.prisma.client.transaction.findUnique({
-      where: { appointmentId },
-      select: { id: true, amount: true, createdAt: true, method: true },
-    });
+    const existingTransaction = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findUnique({
+          where: { appointmentId },
+          select: { id: true, amount: true, createdAt: true, method: true },
+        });
+      },
+    );
 
     // Buscar dados do appointment com procedure
-    const appointment = await this.prisma.client.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        patient: { select: { id: true, name: true } },
-        staff: { select: { id: true, name: true } },
-        procedure: { select: { id: true, name: true, grossAmount: true } },
-      },
+    const appointment = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+          patient: { select: { id: true, name: true } },
+          staff: { select: { id: true, name: true } },
+          procedure: { select: { id: true, name: true, grossAmount: true } },
+        },
+      });
     });
 
     if (!appointment) {
@@ -1499,7 +1862,9 @@ export class FinanceService {
     }
 
     if (!appointment.procedure) {
-      throw new BadRequestException('Agendamento não possui procedimento vinculado.');
+      throw new BadRequestException(
+        'Agendamento não possui procedimento vinculado.',
+      );
     }
 
     const procedure = appointment.procedure;
@@ -1539,9 +1904,13 @@ export class FinanceService {
 
     if (startDate && endDate) {
       // Converter datas para UTC para comparação com o campo date (DATE type)
-      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [startYear, startMonth, startDay] = startDate
+        .split('-')
+        .map(Number);
       const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
-      const start = new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0));
+      const start = new Date(
+        Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0),
+      );
       const end = new Date(Date.UTC(endYear, endMonth - 1, endDay, 0, 0, 0, 0));
       where.date = { gte: start, lte: end };
     }
@@ -1554,15 +1923,17 @@ export class FinanceService {
       where.closureType = closureType;
     }
 
-    const closures = await this.prisma.client.dailyClosure.findMany({
-      where,
-      include: {
-        closedBy: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { date: 'desc' },
+    const closures = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findMany({
+        where,
+        include: {
+          closedBy: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { date: 'desc' },
+      });
     });
 
-    return closures.map(c => ({
+    return closures.map((c) => ({
       id: c.id,
       date: c.date,
       closureType: c.closureType,
@@ -1586,11 +1957,18 @@ export class FinanceService {
    * Busca o resumo do caixa para preview antes do fechamento
    * Inclui todas as transações do dia e os saldos calculados
    */
-  async getClosurePreview(tenantId: string, date: string, userId: string, closureType: string) {
+  async getClosurePreview(
+    tenantId: string,
+    date: string,
+    userId: string,
+    closureType: string,
+  ) {
     // Usar range de horário de Brasília (UTC-3) consistente com getDailyTransactions e fechamento
     const [year, month, day] = date.split('-').map(Number);
     const startOfDay = new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
-    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999));
+    const endOfDay = new Date(
+      Date.UTC(year, month - 1, day + 1, 2, 59, 59, 999),
+    );
     // Data alvo para comparação com campo DATE (meia-noite UTC)
     const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
@@ -1606,24 +1984,29 @@ export class FinanceService {
       where.createdById = userId;
     }
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where,
-      include: {
-        patient: { select: { name: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true } },
-            procedure: { select: { name: true } },
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where,
+        include: {
+          patient: { select: { name: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true } },
+              procedure: { select: { name: true } },
+            },
           },
+          createdBy: { select: { name: true } },
+          expenseCategory: { select: { name: true, code: true } },
         },
-        createdBy: { select: { name: true } },
-        expenseCategory: { select: { name: true, code: true } },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
     // Calcular saldos por método
-    const balancesByMethod: Record<string, { income: number; expense: number }> = {
+    const balancesByMethod: Record<
+      string,
+      { income: number; expense: number }
+    > = {
       Dinheiro: { income: 0, expense: 0 },
       PIX: { income: 0, expense: 0 },
       'Cartão de Débito': { income: 0, expense: 0 },
@@ -1633,7 +2016,7 @@ export class FinanceService {
     let totalIncome = 0;
     let totalExpense = 0;
 
-    transactions.forEach(t => {
+    transactions.forEach((t) => {
       const method = t.method || 'Dinheiro';
       const amount = Number(t.amount);
       const typeUpper = t.type?.toUpperCase();
@@ -1665,19 +2048,25 @@ export class FinanceService {
       lastClosureWhere.closureType = 'ADMIN';
     }
 
-    const lastClosure = await this.prisma.client.dailyClosure.findFirst({
-      where: lastClosureWhere,
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], // Último por data, depois por criação
-      select: { cashCount: true },
+    const lastClosure = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: lastClosureWhere,
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], // Último por data, depois por criação
+        select: { cashCount: true },
+      });
     });
 
     // Saldo inicial é apenas o dinheiro do último fechamento (cashCount)
-    const previousDayFinalBalance = lastClosure && lastClosure.cashCount ? Number(lastClosure.cashCount) : 0;
+    const previousDayFinalBalance =
+      lastClosure && lastClosure.cashCount ? Number(lastClosure.cashCount) : 0;
 
     // Formatar transações para exibição
-    const formattedTransactions = transactions.map(t => {
-      const description = t.description || 
-        (t.appointment?.patient?.name ? `${t.appointment.procedure?.name || t.category} - ${t.appointment.patient.name}` : null) ||
+    const formattedTransactions = transactions.map((t) => {
+      const description =
+        t.description ||
+        (t.appointment?.patient?.name
+          ? `${t.appointment.procedure?.name || t.category} - ${t.appointment.patient.name}`
+          : null) ||
         (t.patient?.name ? `${t.category} - ${t.patient.name}` : null) ||
         t.category ||
         'Sem descrição';
@@ -1701,7 +2090,8 @@ export class FinanceService {
       totalIncome,
       totalExpense,
       netBalance: totalIncome - totalExpense,
-      suggestedFinalBalance: previousDayFinalBalance + totalIncome - totalExpense,
+      suggestedFinalBalance:
+        previousDayFinalBalance + totalIncome - totalExpense,
       balancesByMethod,
     };
   }
@@ -1710,24 +2100,267 @@ export class FinanceService {
    * Cria repasse médico retroativamente quando o prontuário é finalizado
    * Este método é chamado pelo PepService quando um prontuário é finalizado
    */
-  async createMedicalFeeRetroactively(tenantId: string, appointmentId: string): Promise<void> {
+  async createMedicalFeeRetroactively(
+    tenantId: string,
+    appointmentId: string,
+  ): Promise<void> {
     console.log(`\n${'='.repeat(80)}`);
-    console.log(`[FinanceService.createMedicalFeeRetroactively] 🔄🔄🔄 INICIANDO CRIAÇÃO RETROATIVA 🔄🔄🔄`);
-    console.log(`[FinanceService.createMedicalFeeRetroactively] appointmentId: ${appointmentId}`);
-    console.log(`[FinanceService.createMedicalFeeRetroactively] tenantId: ${tenantId}`);
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] 🔄🔄🔄 INICIANDO CRIAÇÃO RETROATIVA 🔄🔄🔄`,
+    );
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] appointmentId: ${appointmentId}`,
+    );
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] tenantId: ${tenantId}`,
+    );
     console.log(`${'='.repeat(80)}\n`);
-    
+
     // 1. Buscar o appointment com medicalRecord e staff
-    const appointment = await this.prisma.client.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        medicalRecord: {
-          select: {
-            id: true,
-            isFinalized: true,
+    const appointment = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+          medicalRecord: {
+            select: {
+              id: true,
+              isFinalized: true,
+            },
+          },
+          staff: {
+            select: {
+              id: true,
+              name: true,
+              commissionRate: true,
+              fixedCommission: true,
+              commissionType: true,
+              role: true,
+            },
           },
         },
-        staff: {
+      });
+    });
+
+    if (!appointment) {
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ ERRO: Appointment ${appointmentId} não encontrado no tenant ${tenantId}`,
+      );
+      return;
+    }
+
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] DEBUG - Appointment encontrado:`,
+      {
+        appointmentId: appointment.id,
+        staffId: appointment.staffId,
+        staffName: appointment.staff?.name,
+        staffCommissionType: appointment.staff?.commissionType,
+        staffCommissionRate: appointment.staff?.commissionRate,
+        staffFixedCommission: appointment.staff?.fixedCommission,
+        hasMedicalRecord: !!appointment.medicalRecord,
+        medicalRecordId: appointment.medicalRecord?.id,
+        isFinalized: appointment.medicalRecord?.isFinalized,
+      },
+    );
+
+    // 2. Verificar se o prontuário está finalizado
+    if (!appointment.medicalRecord) {
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] ⚠️ Appointment ${appointmentId} não possui prontuário. Não criando repasse.`,
+      );
+      return;
+    }
+
+    if (!appointment.medicalRecord.isFinalized) {
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] ⚠️ Prontuário do appointment ${appointmentId} não está finalizado (isFinalized: ${appointment.medicalRecord.isFinalized}). Não criando repasse.`,
+      );
+      return;
+    }
+
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] ✅ Prontuário confirmado como finalizado. Continuando...`,
+    );
+
+    // 3. Buscar a transação pelo appointmentId (a relação é Transaction -> Appointment)
+    // Primeiro tentar findUnique (mais eficiente)
+    let transaction = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findUnique({
+        where: { appointmentId },
+        include: {
+          medicalFee: true, // Verificar se já existe repasse
+        },
+      });
+    });
+
+    // Se não encontrar com findUnique, tentar findFirst (caso haja algum problema de índice)
+    if (!transaction) {
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] ⚠️ Transação não encontrada com findUnique. Tentando findFirst...`,
+      );
+      transaction = await this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.transaction.findFirst({
+          where: {
+            appointmentId,
+            tenantId, // Garantir que é do mesmo tenant
+          },
+          include: {
+            medicalFee: true,
+          },
+          orderBy: {
+            createdAt: 'desc', // Pegar a mais recente se houver múltiplas
+          },
+        });
+      });
+    }
+
+    if (!transaction) {
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ ERRO: Appointment ${appointmentId} não possui transação. Não é possível criar repasse sem transação.`,
+      );
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Verificando se existe alguma transação para este appointment...`,
+      );
+
+      // Buscar todas as transações do tenant para debug
+      const allTransactionsForAppointment = await this.prisma.withTenant(
+        tenantId,
+        async (tx) => {
+          return tx.transaction.findMany({
+            where: {
+              tenantId,
+              appointmentId: appointmentId, // Verificar se há alguma com este appointmentId
+            },
+            select: {
+              id: true,
+              appointmentId: true,
+              type: true,
+              amount: true,
+              description: true,
+              createdAt: true,
+            },
+            take: 5,
+          });
+        },
+      );
+
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Transações encontradas para este appointmentId:`,
+        allTransactionsForAppointment,
+      );
+
+      // Verificar se há transações sem appointmentId mas que poderiam ser relacionadas
+      const appointmentDetails = await this.prisma.withTenant(
+        tenantId,
+        async (tx) => {
+          return tx.appointment.findUnique({
+            where: { id: appointmentId },
+            select: {
+              id: true,
+              patientId: true,
+              staffId: true,
+              procedureId: true,
+              startTime: true,
+            },
+          });
+        },
+      );
+
+      if (appointmentDetails) {
+        // Buscar transações do mesmo paciente e médico no mesmo dia
+        const startOfDay = new Date(appointmentDetails.startTime);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(appointmentDetails.startTime);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const relatedTransactions = await this.prisma.withTenant(
+          tenantId,
+          async (tx) => {
+            return tx.transaction.findMany({
+              where: {
+                tenantId,
+                patientId: appointmentDetails.patientId,
+                staffId: appointmentDetails.staffId,
+                type: 'income',
+                createdAt: {
+                  gte: startOfDay,
+                  lte: endOfDay,
+                },
+                appointmentId: null, // Transações sem appointmentId
+              },
+              select: {
+                id: true,
+                appointmentId: true,
+                description: true,
+                amount: true,
+                createdAt: true,
+              },
+              take: 5,
+            });
+          },
+        );
+
+        console.error(
+          `[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Transações relacionadas (mesmo paciente/médico/dia) sem appointmentId:`,
+          relatedTransactions,
+        );
+      }
+
+      return;
+    }
+
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] DEBUG - Transação encontrada:`,
+      {
+        transactionId: transaction.id,
+        type: transaction.type,
+        amount: transaction.amount,
+        staffId: transaction.staffId,
+        hasMedicalFee: !!transaction.medicalFee,
+        medicalFeeId: transaction.medicalFee?.id,
+      },
+    );
+
+    // 4. Verificar se já existe repasse
+    if (transaction.medicalFee) {
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - Já existe repasse para esta transação: ${transaction.medicalFee.id}`,
+      );
+      return;
+    }
+
+    // 5. Verificar se a transação é do tipo INCOME
+    if (transaction.type !== TransactionType.INCOME) {
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - Transação não é do tipo INCOME (tipo: ${transaction.type}). Não criando repasse.`,
+      );
+      return;
+    }
+
+    // 6. Verificar se tem staffId (médico) - priorizar o do appointment
+    const staffId = appointment.staffId || transaction.staffId;
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] DEBUG - staffId determinado:`,
+      {
+        appointmentStaffId: appointment.staffId,
+        transactionStaffId: transaction.staffId,
+        finalStaffId: staffId,
+      },
+    );
+
+    if (!staffId) {
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - Appointment não possui staffId. Não criando repasse.`,
+      );
+      return;
+    }
+
+    // 7. Verificar se o médico tem commissionRate
+    const doctor =
+      appointment.staff ||
+      (await this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.staff.findUnique({
+          where: { id: staffId },
           select: {
             id: true,
             name: true,
@@ -1736,250 +2369,105 @@ export class FinanceService {
             commissionType: true,
             role: true,
           },
-        },
-      },
-    });
-
-    if (!appointment) {
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ ERRO: Appointment ${appointmentId} não encontrado no tenant ${tenantId}`);
-      return;
-    }
-
-    console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Appointment encontrado:`, {
-      appointmentId: appointment.id,
-      staffId: appointment.staffId,
-      staffName: appointment.staff?.name,
-      staffCommissionType: appointment.staff?.commissionType,
-      staffCommissionRate: appointment.staff?.commissionRate,
-      staffFixedCommission: appointment.staff?.fixedCommission,
-      hasMedicalRecord: !!appointment.medicalRecord,
-      medicalRecordId: appointment.medicalRecord?.id,
-      isFinalized: appointment.medicalRecord?.isFinalized,
-    });
-
-    // 2. Verificar se o prontuário está finalizado
-    if (!appointment.medicalRecord) {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] ⚠️ Appointment ${appointmentId} não possui prontuário. Não criando repasse.`);
-      return;
-    }
-    
-    if (!appointment.medicalRecord.isFinalized) {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] ⚠️ Prontuário do appointment ${appointmentId} não está finalizado (isFinalized: ${appointment.medicalRecord.isFinalized}). Não criando repasse.`);
-      return;
-    }
-    
-    console.log(`[FinanceService.createMedicalFeeRetroactively] ✅ Prontuário confirmado como finalizado. Continuando...`);
-
-    // 3. Buscar a transação pelo appointmentId (a relação é Transaction -> Appointment)
-    // Primeiro tentar findUnique (mais eficiente)
-    let transaction = await this.prisma.client.transaction.findUnique({
-      where: { appointmentId },
-      include: {
-        medicalFee: true, // Verificar se já existe repasse
-      },
-    });
-
-    // Se não encontrar com findUnique, tentar findFirst (caso haja algum problema de índice)
-    if (!transaction) {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] ⚠️ Transação não encontrada com findUnique. Tentando findFirst...`);
-      transaction = await this.prisma.client.transaction.findFirst({
-        where: { 
-          appointmentId,
-          tenantId, // Garantir que é do mesmo tenant
-        },
-        include: {
-          medicalFee: true,
-        },
-        orderBy: {
-          createdAt: 'desc', // Pegar a mais recente se houver múltiplas
-        },
-      });
-    }
-
-    if (!transaction) {
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ ERRO: Appointment ${appointmentId} não possui transação. Não é possível criar repasse sem transação.`);
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Verificando se existe alguma transação para este appointment...`);
-      
-      // Buscar todas as transações do tenant para debug
-      const allTransactionsForAppointment = await this.prisma.client.transaction.findMany({
-        where: { 
-          tenantId,
-          appointmentId: appointmentId, // Verificar se há alguma com este appointmentId
-        },
-        select: {
-          id: true,
-          appointmentId: true,
-          type: true,
-          amount: true,
-          description: true,
-          createdAt: true,
-        },
-        take: 5,
-      });
-      
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Transações encontradas para este appointmentId:`, allTransactionsForAppointment);
-      
-      // Verificar se há transações sem appointmentId mas que poderiam ser relacionadas
-      const appointmentDetails = await this.prisma.client.appointment.findUnique({
-        where: { id: appointmentId },
-        select: {
-          id: true,
-          patientId: true,
-          staffId: true,
-          procedureId: true,
-          startTime: true,
-        },
-      });
-      
-      if (appointmentDetails) {
-        // Buscar transações do mesmo paciente e médico no mesmo dia
-        const startOfDay = new Date(appointmentDetails.startTime);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(appointmentDetails.startTime);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        const relatedTransactions = await this.prisma.client.transaction.findMany({
-          where: {
-            tenantId,
-            patientId: appointmentDetails.patientId,
-            staffId: appointmentDetails.staffId,
-            type: 'income',
-            createdAt: {
-              gte: startOfDay,
-              lte: endOfDay,
-            },
-            appointmentId: null, // Transações sem appointmentId
-          },
-          select: {
-            id: true,
-            appointmentId: true,
-            description: true,
-            amount: true,
-            createdAt: true,
-          },
-          take: 5,
         });
-        
-        console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ DEBUG - Transações relacionadas (mesmo paciente/médico/dia) sem appointmentId:`, relatedTransactions);
-      }
-      
-      return;
-    }
+      }));
 
-    console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Transação encontrada:`, {
-      transactionId: transaction.id,
-      type: transaction.type,
-      amount: transaction.amount,
-      staffId: transaction.staffId,
-      hasMedicalFee: !!transaction.medicalFee,
-      medicalFeeId: transaction.medicalFee?.id,
-    });
-
-    // 4. Verificar se já existe repasse
-    if (transaction.medicalFee) {
-      console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Já existe repasse para esta transação: ${transaction.medicalFee.id}`);
-      return;
-    }
-
-    // 5. Verificar se a transação é do tipo INCOME
-    if (transaction.type !== TransactionType.INCOME) {
-      console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Transação não é do tipo INCOME (tipo: ${transaction.type}). Não criando repasse.`);
-      return;
-    }
-
-    // 6. Verificar se tem staffId (médico) - priorizar o do appointment
-    const staffId = appointment.staffId || transaction.staffId;
-    console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - staffId determinado:`, {
-      appointmentStaffId: appointment.staffId,
-      transactionStaffId: transaction.staffId,
-      finalStaffId: staffId,
-    });
-
-    if (!staffId) {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Appointment não possui staffId. Não criando repasse.`);
-      return;
-    }
-
-    // 7. Verificar se o médico tem commissionRate
-    const doctor = appointment.staff || await this.prisma.client.staff.findUnique({
-      where: { id: staffId },
-      select: { 
-        id: true, 
-        name: true, 
-        commissionRate: true,
-        fixedCommission: true,
-        commissionType: true,
-        role: true,
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico verificado:`,
+      {
+        id: doctor?.id,
+        name: doctor?.name,
+        commissionType: doctor?.commissionType,
+        commissionRate: doctor?.commissionRate,
+        fixedCommission: doctor?.fixedCommission,
+        role: doctor?.role,
       },
-    });
-
-    console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico verificado:`, {
-      id: doctor?.id,
-      name: doctor?.name,
-      commissionType: doctor?.commissionType,
-      commissionRate: doctor?.commissionRate,
-      fixedCommission: doctor?.fixedCommission,
-      role: doctor?.role,
-    });
+    );
 
     if (!doctor) {
-      console.error(`[FinanceService.createMedicalFeeRetroactively] DEBUG - ERRO: Médico não encontrado com staffId: ${staffId}`);
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - ERRO: Médico não encontrado com staffId: ${staffId}`,
+      );
       return;
     }
 
     // Verificar se tem configuração de repasse válida
     const isPercentage = doctor.commissionType === 'PERCENTAGE';
     const isFixed = doctor.commissionType === 'FIXED';
-    
+
     let feeAmount: number | null = null;
     let commissionRate: number | null = null;
 
     if (isPercentage) {
       if (!doctor.commissionRate || Number(doctor.commissionRate) <= 0) {
-        console.warn(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate}). Não criando repasse.`);
+        console.warn(
+          `[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico "${doctor.name}" com tipo PERCENTAGE mas sem commissionRate ou commissionRate = 0 (valor: ${doctor.commissionRate}). Não criando repasse.`,
+        );
         return;
       }
       commissionRate = Number(doctor.commissionRate);
       const grossAmount = Number(transaction.amount);
       feeAmount = (grossAmount * commissionRate) / 100;
     } else if (isFixed) {
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 💰 Processando tipo FIXED para ${doctor.name}`);
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 💰 doctor.fixedCommission RAW:`, doctor.fixedCommission);
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 💰 typeof doctor.fixedCommission:`, typeof doctor.fixedCommission);
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 💰 Number(doctor.fixedCommission):`, Number(doctor.fixedCommission));
-      
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 💰 Processando tipo FIXED para ${doctor.name}`,
+      );
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 💰 doctor.fixedCommission RAW:`,
+        doctor.fixedCommission,
+      );
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 💰 typeof doctor.fixedCommission:`,
+        typeof doctor.fixedCommission,
+      );
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 💰 Number(doctor.fixedCommission):`,
+        Number(doctor.fixedCommission),
+      );
+
       if (!doctor.fixedCommission || Number(doctor.fixedCommission) <= 0) {
-        console.warn(`[FinanceService.createMedicalFeeRetroactively] ⚠️ FIXED - Médico "${doctor.name}" sem fixedCommission válido (valor RAW: ${doctor.fixedCommission}, Number: ${Number(doctor.fixedCommission)}). Não criando repasse.`);
+        console.warn(
+          `[FinanceService.createMedicalFeeRetroactively] ⚠️ FIXED - Médico "${doctor.name}" sem fixedCommission válido (valor RAW: ${doctor.fixedCommission}, Number: ${Number(doctor.fixedCommission)}). Não criando repasse.`,
+        );
         return;
       }
       feeAmount = Number(doctor.fixedCommission); // Valor fixo é o próprio feeAmount
       commissionRate = null; // Não usa percentual
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 💰 feeAmount calculado: ${feeAmount}`);
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 💰 feeAmount calculado: ${feeAmount}`,
+      );
     } else {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}. Não criando repasse.`);
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - Médico "${doctor.name}" com tipo de repasse inválido: ${doctor.commissionType}. Não criando repasse.`,
+      );
       return;
     }
 
     if (feeAmount === null || feeAmount <= 0) {
-      console.warn(`[FinanceService.createMedicalFeeRetroactively] DEBUG - feeAmount inválido: ${feeAmount}. Não criando repasse.`);
+      console.warn(
+        `[FinanceService.createMedicalFeeRetroactively] DEBUG - feeAmount inválido: ${feeAmount}. Não criando repasse.`,
+      );
       return;
     }
 
     // 8. Criar o repasse
     const grossAmount = Number(transaction.amount);
 
-    console.log(`[FinanceService.createMedicalFeeRetroactively] DEBUG - Criando repasse retroativamente:`, {
-      tenantId,
-      appointmentId,
-      transactionId: transaction.id,
-      staffId,
-      staffName: doctor.name,
-      commissionType: doctor.commissionType,
-      grossAmount,
-      commissionRate,
-      fixedCommission: isFixed ? feeAmount : null,
-      feeAmount,
-    });
+    console.log(
+      `[FinanceService.createMedicalFeeRetroactively] DEBUG - Criando repasse retroativamente:`,
+      {
+        tenantId,
+        appointmentId,
+        transactionId: transaction.id,
+        staffId,
+        staffName: doctor.name,
+        commissionType: doctor.commissionType,
+        grossAmount,
+        commissionRate,
+        fixedCommission: isFixed ? feeAmount : null,
+        feeAmount,
+      },
+    );
 
     try {
       // commissionRate é obrigatório no Prisma, usar 0 para tipo FIXED
@@ -1988,48 +2476,71 @@ export class FinanceService {
         staffId,
         transactionId: transaction.id,
         grossAmount,
-        feeAmount: feeAmount as number,
+        feeAmount: feeAmount,
         status: 'pending',
         commissionRate: commissionRate ?? 0, // 0 para FIXED, valor real para PERCENTAGE
       };
-      
-      console.log(`[FinanceService.createMedicalFeeRetroactively] 📝 Dados para criar medicalFee:`, medicalFeeData);
-      
-      const medicalFee = await this.prisma.client.medicalFee.create({
-        data: medicalFeeData,
+
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] 📝 Dados para criar medicalFee:`,
+        medicalFeeData,
+      );
+
+      const medicalFee = await this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.medicalFee.create({
+          data: medicalFeeData,
+        });
       });
 
-      console.log(`[FinanceService.createMedicalFeeRetroactively] ✅✅✅ REPASSE CRIADO COM SUCESSO! ✅✅✅`, {
-        id: medicalFee.id,
-        status: medicalFee.status,
-        staffId: medicalFee.staffId,
-        staffName: doctor.name,
-        commissionType: doctor.commissionType,
-        feeAmount: medicalFee.feeAmount,
-        grossAmount: medicalFee.grossAmount,
-        commissionRate: medicalFee.commissionRate,
-        appointmentId,
-        transactionId: transaction.id,
-      });
+      console.log(
+        `[FinanceService.createMedicalFeeRetroactively] ✅✅✅ REPASSE CRIADO COM SUCESSO! ✅✅✅`,
+        {
+          id: medicalFee.id,
+          status: medicalFee.status,
+          staffId: medicalFee.staffId,
+          staffName: doctor.name,
+          commissionType: doctor.commissionType,
+          feeAmount: medicalFee.feeAmount,
+          grossAmount: medicalFee.grossAmount,
+          commissionRate: medicalFee.commissionRate,
+          appointmentId,
+          transactionId: transaction.id,
+        },
+      );
     } catch (error) {
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌❌❌ ERRO CRÍTICO ao criar repasse:`, error);
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ Stack trace:`, error instanceof Error ? error.stack : 'N/A');
-      console.error(`[FinanceService.createMedicalFeeRetroactively] ❌ Dados do contexto:`, {
-        tenantId,
-        appointmentId,
-        staffId,
-        staffName: doctor.name,
-        transactionId: transaction.id,
-        feeAmount,
-        commissionRate,
-      });
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌❌❌ ERRO CRÍTICO ao criar repasse:`,
+        error,
+      );
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ Stack trace:`,
+        error instanceof Error ? error.stack : 'N/A',
+      );
+      console.error(
+        `[FinanceService.createMedicalFeeRetroactively] ❌ Dados do contexto:`,
+        {
+          tenantId,
+          appointmentId,
+          staffId,
+          staffName: doctor.name,
+          transactionId: transaction.id,
+          feeAmount,
+          commissionRate,
+        },
+      );
       throw error;
     }
   }
 
-  async recreateMissingMedicalFees(tenantId: string, startDate?: string, endDate?: string) {
-    console.log(`[FinanceService.recreateMissingMedicalFees] 🔄 Iniciando recriação de repasses faltantes...`);
-    
+  async recreateMissingMedicalFees(
+    tenantId: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    console.log(
+      `[FinanceService.recreateMissingMedicalFees] 🔄 Iniciando recriação de repasses faltantes...`,
+    );
+
     // Construir filtro de data se fornecido
     const dateFilter: any = {};
     if (startDate || endDate) {
@@ -2047,52 +2558,59 @@ export class FinanceService {
     }
 
     // Buscar todos os appointments finalizados com transação mas sem repasse
-    const appointmentsWithTransaction = await this.prisma.client.appointment.findMany({
-      where: {
-        tenantId,
-        status: 'completed',
-        medicalRecord: {
-          isFinalized: true,
-        },
-        transaction: {
-          isNot: null, // Tem transação
-          type: 'income', // Transação de entrada
-          medicalFee: null, // Mas não tem repasse
-        },
-        ...dateFilter,
-      },
-      include: {
-        medicalRecord: {
-          select: {
-            id: true,
-            isFinalized: true,
+    const appointmentsWithTransaction = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.appointment.findMany({
+          where: {
+            tenantId,
+            status: 'completed',
+            medicalRecord: {
+              isFinalized: true,
+            },
+            transaction: {
+              isNot: null, // Tem transação
+              type: 'income', // Transação de entrada
+              medicalFee: null, // Mas não tem repasse
+            },
+            ...dateFilter,
           },
-        },
-        transaction: {
-          select: {
-            id: true,
-            type: true,
-            amount: true,
-            medicalFee: {
+          include: {
+            medicalRecord: {
               select: {
                 id: true,
+                isFinalized: true,
+              },
+            },
+            transaction: {
+              select: {
+                id: true,
+                type: true,
+                amount: true,
+                medicalFee: {
+                  select: {
+                    id: true,
+                  },
+                },
+              },
+            },
+            staff: {
+              select: {
+                id: true,
+                name: true,
+                commissionType: true,
+                commissionRate: true,
+                fixedCommission: true,
               },
             },
           },
-        },
-        staff: {
-          select: {
-            id: true,
-            name: true,
-            commissionType: true,
-            commissionRate: true,
-            fixedCommission: true,
-          },
-        },
+        });
       },
-    });
+    );
 
-    console.log(`[FinanceService.recreateMissingMedicalFees] 📊 Encontrados ${appointmentsWithTransaction.length} appointments com transação mas sem repasse.`);
+    console.log(
+      `[FinanceService.recreateMissingMedicalFees] 📊 Encontrados ${appointmentsWithTransaction.length} appointments com transação mas sem repasse.`,
+    );
 
     const results = {
       total: appointmentsWithTransaction.length,
@@ -2103,10 +2621,12 @@ export class FinanceService {
 
     for (const appointment of appointmentsWithTransaction) {
       try {
-        console.log(`[FinanceService.recreateMissingMedicalFees] 🔄 Processando appointment: ${appointment.id}, médico: ${appointment.staff?.name}`);
-        
+        console.log(
+          `[FinanceService.recreateMissingMedicalFees] 🔄 Processando appointment: ${appointment.id}, médico: ${appointment.staff?.name}`,
+        );
+
         await this.createMedicalFeeRetroactively(tenantId, appointment.id);
-        
+
         results.success++;
         results.details.push({
           appointmentId: appointment.id,
@@ -2121,45 +2641,56 @@ export class FinanceService {
           status: 'error',
           error: error instanceof Error ? error.message : String(error),
         });
-        console.error(`[FinanceService.recreateMissingMedicalFees] ❌ Erro ao processar appointment ${appointment.id}:`, error);
+        console.error(
+          `[FinanceService.recreateMissingMedicalFees] ❌ Erro ao processar appointment ${appointment.id}:`,
+          error,
+        );
       }
     }
 
-    console.log(`[FinanceService.recreateMissingMedicalFees] ✅ Processamento concluído: ${results.success} sucessos, ${results.errors} erros.`);
+    console.log(
+      `[FinanceService.recreateMissingMedicalFees] ✅ Processamento concluído: ${results.success} sucessos, ${results.errors} erros.`,
+    );
 
     return results;
   }
 
   async diagnoseMedicalFees(tenantId: string) {
-    console.log('[FinanceService.diagnoseMedicalFees] 🔍 Iniciando diagnóstico...');
-    
+    console.log(
+      '[FinanceService.diagnoseMedicalFees] 🔍 Iniciando diagnóstico...',
+    );
+
     // 1. Buscar configurações dos dois profissionais
-    const draLais = await this.prisma.client.staff.findFirst({
-      where: {
-        tenantId,
-        name: { contains: 'Lais', mode: 'insensitive' },
-      },
-      select: {
-        id: true,
-        name: true,
-        commissionType: true,
-        commissionRate: true,
-        fixedCommission: true,
-      },
+    const draLais = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findFirst({
+        where: {
+          tenantId,
+          name: { contains: 'Lais', mode: 'insensitive' },
+        },
+        select: {
+          id: true,
+          name: true,
+          commissionType: true,
+          commissionRate: true,
+          fixedCommission: true,
+        },
+      });
     });
 
-    const drCaio = await this.prisma.client.staff.findFirst({
-      where: {
-        tenantId,
-        name: { contains: 'Caio', mode: 'insensitive' },
-      },
-      select: {
-        id: true,
-        name: true,
-        commissionType: true,
-        commissionRate: true,
-        fixedCommission: true,
-      },
+    const drCaio = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findFirst({
+        where: {
+          tenantId,
+          name: { contains: 'Caio', mode: 'insensitive' },
+        },
+        select: {
+          id: true,
+          name: true,
+          commissionType: true,
+          commissionRate: true,
+          fixedCommission: true,
+        },
+      });
     });
 
     if (!draLais || !drCaio) {
@@ -2171,124 +2702,140 @@ export class FinanceService {
     }
 
     // 2. Buscar repasses pendentes para cada um
-    const draLaisFees = await this.prisma.client.medicalFee.findMany({
-      where: {
-        tenantId,
-        staffId: draLais.id,
-        status: 'pending',
-      },
-      include: {
-        transaction: {
-          include: {
-            appointment: {
-              include: {
-                medicalRecord: {
-                  select: {
-                    id: true,
-                    isFinalized: true,
+    const draLaisFees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where: {
+          tenantId,
+          staffId: draLais.id,
+          status: 'pending',
+        },
+        include: {
+          transaction: {
+            include: {
+              appointment: {
+                include: {
+                  medicalRecord: {
+                    select: {
+                      id: true,
+                      isFinalized: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
     });
 
-    const drCaioFees = await this.prisma.client.medicalFee.findMany({
-      where: {
-        tenantId,
-        staffId: drCaio.id,
-        status: 'pending',
-      },
-      include: {
-        transaction: {
-          include: {
-            appointment: {
-              include: {
-                medicalRecord: {
-                  select: {
-                    id: true,
-                    isFinalized: true,
+    const drCaioFees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where: {
+          tenantId,
+          staffId: drCaio.id,
+          status: 'pending',
+        },
+        include: {
+          transaction: {
+            include: {
+              appointment: {
+                include: {
+                  medicalRecord: {
+                    select: {
+                      id: true,
+                      isFinalized: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
     });
 
     // 3. Buscar transações com appointmentId mas sem repasse
-    const draLaisTransactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        staffId: draLais.id,
-        type: 'income',
-        appointmentId: { not: null },
-        medicalFee: null,
-      },
-      include: {
-        appointment: {
+    const draLaisTransactions = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            staffId: draLais.id,
+            type: 'income',
+            appointmentId: { not: null },
+            medicalFee: null,
+          },
           include: {
-            medicalRecord: {
-              select: {
-                id: true,
-                isFinalized: true,
+            appointment: {
+              include: {
+                medicalRecord: {
+                  select: {
+                    id: true,
+                    isFinalized: true,
+                  },
+                },
               },
             },
           },
-        },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        });
       },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    );
 
-    const drCaioTransactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        staffId: drCaio.id,
-        type: 'income',
-        appointmentId: { not: null },
-        medicalFee: null,
-      },
-      include: {
-        appointment: {
+    const drCaioTransactions = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            staffId: drCaio.id,
+            type: 'income',
+            appointmentId: { not: null },
+            medicalFee: null,
+          },
           include: {
-            medicalRecord: {
-              select: {
-                id: true,
-                isFinalized: true,
+            appointment: {
+              include: {
+                medicalRecord: {
+                  select: {
+                    id: true,
+                    isFinalized: true,
+                  },
+                },
               },
             },
           },
-        },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        });
       },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    );
 
     // 4. Analisar diferenças
-    const draLaisFeesWithFinalized = draLaisFees.filter(fee => 
-      !fee.transaction?.appointment || 
-      fee.transaction.appointment.medicalRecord?.isFinalized === true
+    const draLaisFeesWithFinalized = draLaisFees.filter(
+      (fee) =>
+        !fee.transaction?.appointment ||
+        fee.transaction.appointment.medicalRecord?.isFinalized === true,
     );
 
-    const drCaioFeesWithFinalized = drCaioFees.filter(fee => 
-      !fee.transaction?.appointment || 
-      fee.transaction.appointment.medicalRecord?.isFinalized === true
+    const drCaioFeesWithFinalized = drCaioFees.filter(
+      (fee) =>
+        !fee.transaction?.appointment ||
+        fee.transaction.appointment.medicalRecord?.isFinalized === true,
     );
 
-    const draLaisTransactionsReady = draLaisTransactions.filter(tx =>
-      tx.appointment?.medicalRecord?.isFinalized === true
+    const draLaisTransactionsReady = draLaisTransactions.filter(
+      (tx) => tx.appointment?.medicalRecord?.isFinalized === true,
     );
 
-    const drCaioTransactionsReady = drCaioTransactions.filter(tx =>
-      tx.appointment?.medicalRecord?.isFinalized === true
+    const drCaioTransactionsReady = drCaioTransactions.filter(
+      (tx) => tx.appointment?.medicalRecord?.isFinalized === true,
     );
 
     const result = {
@@ -2313,28 +2860,34 @@ export class FinanceService {
           total: draLaisFees.length,
           withFinalizedRecord: draLaisFeesWithFinalized.length,
           filteredOut: draLaisFees.length - draLaisFeesWithFinalized.length,
-          details: draLaisFees.map(fee => ({
+          details: draLaisFees.map((fee) => ({
             id: fee.id,
             feeAmount: fee.feeAmount.toString(),
             createdAt: fee.createdAt,
             appointmentId: fee.transaction?.appointment?.id,
             hasMedicalRecord: !!fee.transaction?.appointment?.medicalRecord,
-            isFinalized: fee.transaction?.appointment?.medicalRecord?.isFinalized,
-            willShow: !fee.transaction?.appointment || fee.transaction.appointment.medicalRecord?.isFinalized === true,
+            isFinalized:
+              fee.transaction?.appointment?.medicalRecord?.isFinalized,
+            willShow:
+              !fee.transaction?.appointment ||
+              fee.transaction.appointment.medicalRecord?.isFinalized === true,
           })),
         },
         drCaio: {
           total: drCaioFees.length,
           withFinalizedRecord: drCaioFeesWithFinalized.length,
           filteredOut: drCaioFees.length - drCaioFeesWithFinalized.length,
-          details: drCaioFees.map(fee => ({
+          details: drCaioFees.map((fee) => ({
             id: fee.id,
             feeAmount: fee.feeAmount.toString(),
             createdAt: fee.createdAt,
             appointmentId: fee.transaction?.appointment?.id,
             hasMedicalRecord: !!fee.transaction?.appointment?.medicalRecord,
-            isFinalized: fee.transaction?.appointment?.medicalRecord?.isFinalized,
-            willShow: !fee.transaction?.appointment || fee.transaction.appointment.medicalRecord?.isFinalized === true,
+            isFinalized:
+              fee.transaction?.appointment?.medicalRecord?.isFinalized,
+            willShow:
+              !fee.transaction?.appointment ||
+              fee.transaction.appointment.medicalRecord?.isFinalized === true,
           })),
         },
       },
@@ -2343,7 +2896,7 @@ export class FinanceService {
           total: draLaisTransactions.length,
           withFinalizedRecord: draLaisTransactionsReady.length,
           readyForFee: draLaisTransactionsReady.length,
-          details: draLaisTransactions.map(tx => ({
+          details: draLaisTransactions.map((tx) => ({
             id: tx.id,
             amount: tx.amount.toString(),
             appointmentId: tx.appointmentId,
@@ -2357,7 +2910,7 @@ export class FinanceService {
           total: drCaioTransactions.length,
           withFinalizedRecord: drCaioTransactionsReady.length,
           readyForFee: drCaioTransactionsReady.length,
-          details: drCaioTransactions.map(tx => ({
+          details: drCaioTransactions.map((tx) => ({
             id: tx.id,
             amount: tx.amount.toString(),
             appointmentId: tx.appointmentId,
@@ -2370,7 +2923,10 @@ export class FinanceService {
       },
     };
 
-    console.log('[FinanceService.diagnoseMedicalFees] ✅ Diagnóstico concluído:', JSON.stringify(result, null, 2));
+    console.log(
+      '[FinanceService.diagnoseMedicalFees] ✅ Diagnóstico concluído:',
+      JSON.stringify(result, null, 2),
+    );
 
     return result;
   }
@@ -2380,14 +2936,18 @@ export class FinanceService {
    * Cria repasses para todas as transações dela que ainda não têm repasse
    */
   async fixDraLaisFees(tenantId: string) {
-    console.log('[FinanceService.fixDraLaisFees] 🔧 Iniciando correção dos repasses da Dra Lais...');
+    console.log(
+      '[FinanceService.fixDraLaisFees] 🔧 Iniciando correção dos repasses da Dra Lais...',
+    );
 
     // 1. Buscar a Dra Lais
-    const draLais = await this.prisma.client.staff.findFirst({
-      where: {
-        tenantId,
-        name: { contains: 'Lais', mode: 'insensitive' },
-      },
+    const draLais = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findFirst({
+        where: {
+          tenantId,
+          name: { contains: 'Lais', mode: 'insensitive' },
+        },
+      });
     });
 
     if (!draLais) {
@@ -2404,41 +2964,62 @@ export class FinanceService {
 
     // 2. Verificar se precisa corrigir a configuração de comissão
     let configUpdated = false;
-    if (draLais.commissionType === 'FIXED' && (!draLais.fixedCommission || Number(draLais.fixedCommission) <= 0)) {
-      console.log('[FinanceService.fixDraLaisFees] ⚠️ Dra Lais com tipo FIXED mas sem valor fixo configurado!');
+    if (
+      draLais.commissionType === 'FIXED' &&
+      (!draLais.fixedCommission || Number(draLais.fixedCommission) <= 0)
+    ) {
+      console.log(
+        '[FinanceService.fixDraLaisFees] ⚠️ Dra Lais com tipo FIXED mas sem valor fixo configurado!',
+      );
       // Assumir valor fixo de R$ 60,00 (mesmo do Dr Caio se for PERCENTAGE de 60%)
-      await this.prisma.client.staff.update({
-        where: { id: draLais.id },
-        data: { fixedCommission: 60 },
+      await this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.staff.update({
+          where: { id: draLais.id },
+          data: { fixedCommission: 60 },
+        });
       });
-      console.log('[FinanceService.fixDraLaisFees] ✅ Configurado fixedCommission = R$ 60,00');
+      console.log(
+        '[FinanceService.fixDraLaisFees] ✅ Configurado fixedCommission = R$ 60,00',
+      );
       configUpdated = true;
     }
 
     // Recarregar dados após possível atualização
-    const draLaisUpdated = await this.prisma.client.staff.findUnique({
-      where: { id: draLais.id },
-    });
+    const draLaisUpdated = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.staff.findUnique({
+          where: { id: draLais.id },
+        });
+      },
+    );
 
     // 3. Buscar todas as transações da Dra Lais sem repasse
-    const transactionsSemRepasse = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        staffId: draLais.id,
-        type: 'income',
-        medicalFee: null, // Sem repasse
-      },
-      include: {
-        appointment: {
-          include: {
-            medicalRecord: true,
+    const transactionsSemRepasse = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            staffId: draLais.id,
+            type: 'income',
+            medicalFee: null, // Sem repasse
           },
-        },
+          include: {
+            appointment: {
+              include: {
+                medicalRecord: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    );
 
-    console.log(`[FinanceService.fixDraLaisFees] 📊 Encontradas ${transactionsSemRepasse.length} transações sem repasse`);
+    console.log(
+      `[FinanceService.fixDraLaisFees] 📊 Encontradas ${transactionsSemRepasse.length} transações sem repasse`,
+    );
 
     // 4. Criar repasses para transações com prontuário finalizado
     const results = {
@@ -2459,7 +3040,7 @@ export class FinanceService {
 
     for (const tx of transactionsSemRepasse) {
       const isFinalized = tx.appointment?.medicalRecord?.isFinalized === true;
-      
+
       if (!isFinalized) {
         results.feesSkipped++;
         results.details.push({
@@ -2475,7 +3056,7 @@ export class FinanceService {
         // Calcular valor do repasse
         let feeAmount: number;
         const grossAmount = Number(tx.amount);
-        
+
         if (draLaisUpdated?.commissionType === 'FIXED') {
           feeAmount = Number(draLaisUpdated.fixedCommission || 60);
         } else {
@@ -2498,8 +3079,10 @@ export class FinanceService {
           medicalFeeData.commissionRate = Number(draLaisUpdated.commissionRate);
         }
 
-        const medicalFee = await this.prisma.client.medicalFee.create({
-          data: medicalFeeData,
+        const medicalFee = await this.prisma.withTenant(tenantId, async (t) => {
+          return t.medicalFee.create({
+            data: medicalFeeData,
+          });
         });
 
         results.feesCreated++;
@@ -2511,9 +3094,12 @@ export class FinanceService {
           status: 'created',
         });
 
-        console.log(`[FinanceService.fixDraLaisFees] ✅ Repasse criado: ${medicalFee.id} - R$ ${feeAmount}`);
+        console.log(
+          `[FinanceService.fixDraLaisFees] ✅ Repasse criado: ${medicalFee.id} - R$ ${feeAmount}`,
+        );
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         results.errors.push(`Transação ${tx.id}: ${errorMessage}`);
         results.details.push({
           transactionId: tx.id,
@@ -2521,11 +3107,16 @@ export class FinanceService {
           status: 'error',
           error: errorMessage,
         });
-        console.error(`[FinanceService.fixDraLaisFees] ❌ Erro ao criar repasse para transação ${tx.id}:`, error);
+        console.error(
+          `[FinanceService.fixDraLaisFees] ❌ Erro ao criar repasse para transação ${tx.id}:`,
+          error,
+        );
       }
     }
 
-    console.log(`[FinanceService.fixDraLaisFees] ✅ Correção concluída: ${results.feesCreated} repasses criados, ${results.feesSkipped} ignorados`);
+    console.log(
+      `[FinanceService.fixDraLaisFees] ✅ Correção concluída: ${results.feesCreated} repasses criados, ${results.feesSkipped} ignorados`,
+    );
 
     return results;
   }
@@ -2535,14 +3126,18 @@ export class FinanceService {
    * Verifica: appointments → transações → repasses
    */
   async diagnoseDeepDraLais(tenantId: string) {
-    console.log('[FinanceService.diagnoseDeepDraLais] 🔍 Iniciando diagnóstico profundo...');
+    console.log(
+      '[FinanceService.diagnoseDeepDraLais] 🔍 Iniciando diagnóstico profundo...',
+    );
 
     // 1. Buscar a Dra Lais
-    const draLais = await this.prisma.client.staff.findFirst({
-      where: {
-        tenantId,
-        name: { contains: 'Lais', mode: 'insensitive' },
-      },
+    const draLais = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.staff.findFirst({
+        where: {
+          tenantId,
+          name: { contains: 'Lais', mode: 'insensitive' },
+        },
+      });
     });
 
     if (!draLais) {
@@ -2553,51 +3148,66 @@ export class FinanceService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const appointments: any[] = await this.prisma.client.appointment.findMany({
-      where: {
-        tenantId,
-        staffId: draLais.id,
-        startTime: { gte: thirtyDaysAgo },
-      },
-      include: {
-        patient: { select: { id: true, name: true } },
-        medicalRecord: { select: { id: true, isFinalized: true } },
-        transaction: {
-          include: {
-            medicalFee: true,
+    const appointments: any[] = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.appointment.findMany({
+          where: {
+            tenantId,
+            staffId: draLais.id,
+            startTime: { gte: thirtyDaysAgo },
           },
-        },
+          include: {
+            patient: { select: { id: true, name: true } },
+            medicalRecord: { select: { id: true, isFinalized: true } },
+            transaction: {
+              include: {
+                medicalFee: true,
+              },
+            },
+          },
+          orderBy: { startTime: 'desc' },
+        });
       },
-      orderBy: { startTime: 'desc' },
-    });
+    );
 
     // 3. Buscar TODAS as transações da Dra Lais (por staffId)
-    const transactionsByStaffId: any[] = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        staffId: draLais.id,
+    const transactionsByStaffId: any[] = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            staffId: draLais.id,
+          },
+          include: {
+            appointment: { select: { id: true, status: true } },
+            medicalFee: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        });
       },
-      include: {
-        appointment: { select: { id: true, status: true } },
-        medicalFee: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    );
 
     // 4. Buscar transações que têm appointmentId de appointments da Dra Lais (mas podem não ter staffId)
-    const appointmentIds = appointments.map(a => a.id);
-    const transactionsByAppointment: any[] = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        appointmentId: { in: appointmentIds },
+    const appointmentIds = appointments.map((a) => a.id);
+    const transactionsByAppointment: any[] = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            appointmentId: { in: appointmentIds },
+          },
+          include: {
+            appointment: { select: { id: true, staffId: true, status: true } },
+            medicalFee: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
       },
-      include: {
-        appointment: { select: { id: true, staffId: true, status: true } },
-        medicalFee: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    );
 
     // 5. Analisar
     const analysis = {
@@ -2610,11 +3220,15 @@ export class FinanceService {
       },
       appointments: {
         total: appointments.length,
-        withMedicalRecord: appointments.filter(a => a.medicalRecord).length,
-        withFinalizedRecord: appointments.filter(a => a.medicalRecord?.isFinalized).length,
-        withTransaction: appointments.filter(a => a.transaction).length,
-        withTransactionAndFee: appointments.filter(a => a.transaction?.medicalFee).length,
-        details: appointments.map(a => ({
+        withMedicalRecord: appointments.filter((a) => a.medicalRecord).length,
+        withFinalizedRecord: appointments.filter(
+          (a) => a.medicalRecord?.isFinalized,
+        ).length,
+        withTransaction: appointments.filter((a) => a.transaction).length,
+        withTransactionAndFee: appointments.filter(
+          (a) => a.transaction?.medicalFee,
+        ).length,
+        details: appointments.map((a) => ({
           id: a.id,
           date: a.startTime,
           status: a.status,
@@ -2631,9 +3245,10 @@ export class FinanceService {
       },
       transactionsByStaffId: {
         total: transactionsByStaffId.length,
-        withAppointment: transactionsByStaffId.filter(t => t.appointmentId).length,
-        withFee: transactionsByStaffId.filter(t => t.medicalFee).length,
-        details: transactionsByStaffId.map(t => ({
+        withAppointment: transactionsByStaffId.filter((t) => t.appointmentId)
+          .length,
+        withFee: transactionsByStaffId.filter((t) => t.medicalFee).length,
+        details: transactionsByStaffId.map((t) => ({
           id: t.id,
           amount: t.amount.toString(),
           createdAt: t.createdAt,
@@ -2644,10 +3259,15 @@ export class FinanceService {
       },
       transactionsByAppointment: {
         total: transactionsByAppointment.length,
-        withCorrectStaffId: transactionsByAppointment.filter(t => t.staffId === draLais.id).length,
-        withWrongStaffId: transactionsByAppointment.filter(t => t.staffId && t.staffId !== draLais.id).length,
-        withoutStaffId: transactionsByAppointment.filter(t => !t.staffId).length,
-        details: transactionsByAppointment.map(t => ({
+        withCorrectStaffId: transactionsByAppointment.filter(
+          (t) => t.staffId === draLais.id,
+        ).length,
+        withWrongStaffId: transactionsByAppointment.filter(
+          (t) => t.staffId && t.staffId !== draLais.id,
+        ).length,
+        withoutStaffId: transactionsByAppointment.filter((t) => !t.staffId)
+          .length,
+        details: transactionsByAppointment.map((t) => ({
           id: t.id,
           amount: t.amount.toString(),
           createdAt: t.createdAt,
@@ -2656,24 +3276,36 @@ export class FinanceService {
           appointmentStaffId: t.appointment?.staffId,
           staffIdMatches: t.staffId === draLais.id,
           hasFee: !!t.medicalFee,
-          problem: !t.staffId ? 'SEM_STAFF_ID' : (t.staffId !== draLais.id ? 'STAFF_ID_ERRADO' : null),
+          problem: !t.staffId
+            ? 'SEM_STAFF_ID'
+            : t.staffId !== draLais.id
+              ? 'STAFF_ID_ERRADO'
+              : null,
         })),
       },
       problemSummary: {
         appointmentsWithFinalizedRecordButNoTransaction: appointments.filter(
-          a => a.medicalRecord?.isFinalized && !a.transaction
+          (a) => a.medicalRecord?.isFinalized && !a.transaction,
         ).length,
         appointmentsWithTransactionButNoFee: appointments.filter(
-          a => a.transaction && !a.transaction.medicalFee && a.medicalRecord?.isFinalized
+          (a) =>
+            a.transaction &&
+            !a.transaction.medicalFee &&
+            a.medicalRecord?.isFinalized,
         ).length,
         transactionsWithWrongStaffId: transactionsByAppointment.filter(
-          t => t.staffId && t.staffId !== draLais.id
+          (t) => t.staffId && t.staffId !== draLais.id,
         ).length,
-        transactionsWithoutStaffId: transactionsByAppointment.filter(t => !t.staffId).length,
+        transactionsWithoutStaffId: transactionsByAppointment.filter(
+          (t) => !t.staffId,
+        ).length,
       },
     };
 
-    console.log('[FinanceService.diagnoseDeepDraLais] ✅ Diagnóstico completo:', JSON.stringify(analysis, null, 2));
+    console.log(
+      '[FinanceService.diagnoseDeepDraLais] ✅ Diagnóstico completo:',
+      JSON.stringify(analysis, null, 2),
+    );
 
     return analysis;
   }
@@ -2682,25 +3314,32 @@ export class FinanceService {
    * Corrige o staffId das transações que têm appointmentId mas staffId errado ou ausente
    */
   async fixTransactionStaffIds(tenantId: string) {
-    console.log('[FinanceService.fixTransactionStaffIds] 🔧 Iniciando correção de staffIds...');
+    console.log(
+      '[FinanceService.fixTransactionStaffIds] 🔧 Iniciando correção de staffIds...',
+    );
 
     // Buscar todas as transações que têm appointmentId
-    const transactions: any[] = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        appointmentId: { not: null },
-        type: 'income',
-      },
-      include: {
-        appointment: {
-          include: {
-            staff: true,
-            medicalRecord: true,
+    const transactions: any[] = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        return tx.transaction.findMany({
+          where: {
+            tenantId,
+            appointmentId: { not: null },
+            type: 'income',
           },
-        },
-        medicalFee: true,
+          include: {
+            appointment: {
+              include: {
+                staff: true,
+                medicalRecord: true,
+              },
+            },
+            medicalFee: true,
+          },
+        });
       },
-    });
+    );
 
     const results = {
       total: transactions.length,
@@ -2719,20 +3358,29 @@ export class FinanceService {
       // Se o staffId está errado ou ausente
       if (correctStaffId && tx.staffId !== correctStaffId) {
         try {
-          await this.prisma.client.transaction.update({
-            where: { id: tx.id },
-            data: { staffId: correctStaffId },
+          await this.prisma.withTenant(tenantId, async (t) => {
+            return t.transaction.update({
+              where: { id: tx.id },
+              data: { staffId: correctStaffId },
+            });
           });
           results.fixed++;
-          console.log(`[fixTransactionStaffIds] ✅ Transação ${tx.id} atualizada: staffId ${tx.staffId} → ${correctStaffId}`);
+          console.log(
+            `[fixTransactionStaffIds] ✅ Transação ${tx.id} atualizada: staffId ${tx.staffId} → ${correctStaffId}`,
+          );
 
           // Se não tem repasse e o prontuário está finalizado, criar
           if (!hasFee && isFinalized) {
             try {
-              await this.createMedicalFeeRetroactively(tenantId, tx.appointmentId!);
+              await this.createMedicalFeeRetroactively(
+                tenantId,
+                tx.appointmentId,
+              );
               results.feesCreated++;
             } catch (feeError) {
-              results.errors.push(`Repasse para ${tx.id}: ${feeError instanceof Error ? feeError.message : String(feeError)}`);
+              results.errors.push(
+                `Repasse para ${tx.id}: ${feeError instanceof Error ? feeError.message : String(feeError)}`,
+              );
             }
           }
 
@@ -2744,7 +3392,9 @@ export class FinanceService {
             feeCreated: !hasFee && isFinalized,
           });
         } catch (error) {
-          results.errors.push(`Transação ${tx.id}: ${error instanceof Error ? error.message : String(error)}`);
+          results.errors.push(
+            `Transação ${tx.id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
           results.details.push({
             transactionId: tx.id,
             status: 'error',
@@ -2763,9 +3413,10 @@ export class FinanceService {
       }
     }
 
-    console.log(`[FinanceService.fixTransactionStaffIds] ✅ Correção concluída: ${results.fixed} corrigidos, ${results.feesCreated} repasses criados`);
+    console.log(
+      `[FinanceService.fixTransactionStaffIds] ✅ Correção concluída: ${results.fixed} corrigidos, ${results.feesCreated} repasses criados`,
+    );
 
     return results;
   }
 }
-

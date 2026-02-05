@@ -7,5 +7,3 @@ import { PatientsController } from './patients.controller';
   providers: [PatientsService],
 })
 export class PatientsModule {}
-
-

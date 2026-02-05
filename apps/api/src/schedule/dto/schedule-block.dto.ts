@@ -1,8 +1,15 @@
-import { IsNotEmpty, IsOptional, IsString, IsBoolean, IsDateString, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+} from 'class-validator';
 
 export enum BlockType {
-  DATE = 'date',      // Bloqueia o dia inteiro
-  PERIOD = 'period',  // Bloqueia um período específico
+  DATE = 'date', // Bloqueia o dia inteiro
+  PERIOD = 'period', // Bloqueia um período específico
 }
 
 export class CreateScheduleBlockDto {
@@ -68,4 +75,3 @@ export class UpdateScheduleBlockDto {
   @IsOptional()
   isRecurring?: boolean;
 }
-

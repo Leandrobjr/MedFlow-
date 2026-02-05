@@ -1,14 +1,10 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Req } from '@nestjs/common';
 import { PepService } from './pep.service';
-import { CreateMedicalRecordDto, UpdateMedicalRecordDto, CreateAddendumDto } from './dto/pep.dto';
+import {
+  CreateMedicalRecordDto,
+  UpdateMedicalRecordDto,
+  CreateAddendumDto,
+} from './dto/pep.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/shared-types';
 
@@ -80,5 +76,3 @@ export class PepController {
     });
   }
 }
-
-

@@ -10,8 +10,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
-import { CreateScheduleConfigDto, UpdateScheduleConfigDto } from './dto/schedule-config.dto';
-import { CreateScheduleBlockDto, UpdateScheduleBlockDto } from './dto/schedule-block.dto';
+import {
+  CreateScheduleConfigDto,
+  UpdateScheduleConfigDto,
+} from './dto/schedule-config.dto';
+import {
+  CreateScheduleBlockDto,
+  UpdateScheduleBlockDto,
+} from './dto/schedule-block.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/shared-types';
 
@@ -55,7 +61,12 @@ export class ScheduleController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.scheduleService.getBlocksByStaff(req.tenantId, staffId, startDate, endDate);
+    return this.scheduleService.getBlocksByStaff(
+      req.tenantId,
+      staffId,
+      startDate,
+      endDate,
+    );
   }
 
   @Patch('blocks/:id')
@@ -74,4 +85,3 @@ export class ScheduleController {
     return this.scheduleService.deleteBlock(req.tenantId, id);
   }
 }
-

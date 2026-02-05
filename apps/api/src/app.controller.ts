@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
+import { Public } from './common/decorators/public.decorator';
 
 @Controller()
 export class AppController {
@@ -14,13 +15,18 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Public()
   @Get('health')
   async health() {
     try {
       await this.prisma.client.$queryRaw`SELECT 1`;
       return { status: 'ok', database: 'connected' };
     } catch (error) {
-      return { status: 'error', database: 'disconnected', details: error.message };
+      return {
+        status: 'error',
+        database: 'disconnected',
+        details: error.message,
+      };
     }
   }
 }

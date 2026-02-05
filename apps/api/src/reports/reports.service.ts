@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import PDFDocument from 'pdfkit';
 import { format } from 'date-fns';
@@ -13,7 +17,7 @@ function formatDateBR(date: Date | string, formatStr: string): string {
   const d = new Date(date);
   // Ajustar para o fuso horário brasileiro (UTC-3)
   // Subtrai 3 horas para converter de UTC para horário de Brasília
-  const brDate = new Date(d.getTime() - (3 * 60 * 60 * 1000));
+  const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
   return format(brDate, formatStr, { locale: ptBR });
 }
 
@@ -35,16 +39,21 @@ function formatDateTimeBR(date: Date | string): string {
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async generateDailyClosureReport(tenantId: string, closureId: string): Promise<Buffer> {
-    const closure = await this.prisma.client.dailyClosure.findFirst({
-      where: {
-        id: closureId,
-        tenantId,
-      },
-      include: {
-        closedBy: { select: { name: true, email: true } },
-        tenant: { select: { name: true } },
-      },
+  async generateDailyClosureReport(
+    tenantId: string,
+    closureId: string,
+  ): Promise<Buffer> {
+    const closure = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findFirst({
+        where: {
+          id: closureId,
+          tenantId,
+        },
+        include: {
+          closedBy: { select: { name: true, email: true } },
+          tenant: { select: { name: true } },
+        },
+      });
     });
 
     if (!closure) {
@@ -57,33 +66,37 @@ export class ReportsService {
     const endOfDay = new Date(closure.date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where: {
-        tenantId,
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-        ...(closure.closureType === 'RECEPTIONIST' ? { createdById: closure.createdById } : {}),
-        status: 'completed',
-      },
-      include: {
-        patient: { select: { name: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true } },
-            procedure: { select: { name: true } },
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where: {
+          tenantId,
+          createdAt: {
+            gte: startOfDay,
+            lte: endOfDay,
           },
+          ...(closure.closureType === 'RECEPTIONIST'
+            ? { createdById: closure.createdById }
+            : {}),
+          status: 'completed',
         },
-        createdBy: { select: { name: true } },
-        expenseCategory: { select: { name: true, code: true } },
-      },
-      orderBy: { createdAt: 'asc' },
+        include: {
+          patient: { select: { name: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true } },
+              procedure: { select: { name: true } },
+            },
+          },
+          createdBy: { select: { name: true } },
+          expenseCategory: { select: { name: true, code: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
     // Agrupar transações por método de pagamento
     const byMethod: Record<string, { income: number; expense: number }> = {};
-    transactions.forEach(t => {
+    transactions.forEach((t) => {
       const method = t.method || 'Não informado';
       if (!byMethod[method]) {
         byMethod[method] = { income: 0, expense: 0 };
@@ -106,66 +119,103 @@ export class ReportsService {
     doc.moveDown();
     doc.fontSize(12).text(closure.tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Data: ${formatDateBR(closure.date, "dd 'de' MMMM 'de' yyyy")}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(`Data: ${formatDateBR(closure.date, "dd 'de' MMMM 'de' yyyy")}`, {
+        align: 'center',
+      });
     doc.moveDown();
 
     // Informações do fechamento
     doc.fontSize(12).text('INFORMAÇÕES DO FECHAMENTO', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10);
-    doc.text(`Tipo: ${closure.closureType === 'RECEPTIONIST' ? 'Caixa de Recepcionista' : 'Caixa Administrativo'}`);
+    doc.text(
+      `Tipo: ${closure.closureType === 'RECEPTIONIST' ? 'Caixa de Recepcionista' : 'Caixa Administrativo'}`,
+    );
     doc.text(`Responsável: ${closure.closedBy.name}`);
-    doc.text(`Saldo Inicial: R$ ${Number(closure.initialBalance).toFixed(2).replace('.', ',')}`);
-    doc.text(`Saldo Final: R$ ${Number(closure.finalBalance).toFixed(2).replace('.', ',')}`);
+    doc.text(
+      `Saldo Inicial: R$ ${Number(closure.initialBalance).toFixed(2).replace('.', ',')}`,
+    );
+    doc.text(
+      `Saldo Final: R$ ${Number(closure.finalBalance).toFixed(2).replace('.', ',')}`,
+    );
     doc.moveDown();
 
     // Resumo por método de pagamento - ordem específica
-    doc.fontSize(12).text('SALDO EXTRATIFICADO POR MÉTODO DE PAGAMENTO', { underline: true });
+    doc
+      .fontSize(12)
+      .text('SALDO EXTRATIFICADO POR MÉTODO DE PAGAMENTO', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10);
-    
+
     // Definir ordem específica dos métodos
-    const methodOrder = ['Dinheiro', 'PIX', 'Cartão de Débito', 'Cartão de Crédito'];
-    
+    const methodOrder = [
+      'Dinheiro',
+      'PIX',
+      'Cartão de Débito',
+      'Cartão de Crédito',
+    ];
+
     // Listar cada método na ordem específica com entradas, saídas e saldo
-    methodOrder.forEach(method => {
+    methodOrder.forEach((method) => {
       const methodData = byMethod[method] || { income: 0, expense: 0 };
       const methodBalance = methodData.income - methodData.expense;
       doc.text(`${method}:`, { continued: false });
-      doc.text(`  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
+      doc.text(
+        `  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.fillColor(methodBalance >= 0 ? 'green' : 'red');
-      doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, {
+        indent: 20,
+      });
       doc.fillColor('black'); // Resetar para preto
       doc.moveDown(0.3);
     });
-    
+
     // Listar outros métodos que não estão na ordem padrão
-    Object.keys(byMethod).forEach(method => {
+    Object.keys(byMethod).forEach((method) => {
       if (!methodOrder.includes(method)) {
         const methodData = byMethod[method];
         const methodBalance = methodData.income - methodData.expense;
         doc.text(`${method}:`, { continued: false });
-        doc.text(`  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`, { indent: 20 });
-        doc.text(`  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`, { indent: 20 });
+        doc.text(
+          `  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`,
+          { indent: 20 },
+        );
+        doc.text(
+          `  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`,
+          { indent: 20 },
+        );
         doc.fillColor(methodBalance >= 0 ? 'green' : 'red');
-        doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, { indent: 20 });
+        doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, {
+          indent: 20,
+        });
         doc.fillColor('black'); // Resetar para preto
         doc.moveDown(0.3);
       }
     });
-    
+
     doc.moveDown();
     doc.moveDown(0.5);
     doc.fontSize(10);
     Object.entries(byMethod).forEach(([method, values]) => {
       doc.text(`${method}:`);
-      doc.text(`  Entradas: R$ ${values.income.toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`  Saídas: R$ ${values.expense.toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`  Saldo: R$ ${(values.income - values.expense).toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(`  Entradas: R$ ${values.income.toFixed(2).replace('.', ',')}`, {
+        indent: 20,
+      });
+      doc.text(`  Saídas: R$ ${values.expense.toFixed(2).replace('.', ',')}`, {
+        indent: 20,
+      });
+      doc.text(
+        `  Saldo: R$ ${(values.income - values.expense).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.moveDown(0.3);
     });
     doc.moveDown();
@@ -174,16 +224,24 @@ export class ReportsService {
     doc.fontSize(12).text('TOTAIS DO DIA', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10);
-    doc.text(`Total de Entradas: R$ ${Number(closure.totalIncome).toFixed(2).replace('.', ',')}`);
-    doc.text(`Total de Saídas: R$ ${Number(closure.totalExpense).toFixed(2).replace('.', ',')}`);
-    doc.text(`Saldo Líquido: R$ ${Number(closure.netBalance).toFixed(2).replace('.', ',')}`);
+    doc.text(
+      `Total de Entradas: R$ ${Number(closure.totalIncome).toFixed(2).replace('.', ',')}`,
+    );
+    doc.text(
+      `Total de Saídas: R$ ${Number(closure.totalExpense).toFixed(2).replace('.', ',')}`,
+    );
+    doc.text(
+      `Saldo Líquido: R$ ${Number(closure.netBalance).toFixed(2).replace('.', ',')}`,
+    );
     if (closure.difference) {
       if (Number(closure.difference) !== 0) {
         doc.fillColor('red');
       } else {
         doc.fillColor('black');
       }
-      doc.text(`Diferença: R$ ${Number(closure.difference).toFixed(2).replace('.', ',')}`);
+      doc.text(
+        `Diferença: R$ ${Number(closure.difference).toFixed(2).replace('.', ',')}`,
+      );
       doc.fillColor('black'); // Resetar para preto
     }
     doc.moveDown();
@@ -194,13 +252,19 @@ export class ReportsService {
       doc.moveDown(0.5);
       doc.fontSize(10);
       if (closure.cashCount) {
-        doc.text(`Dinheiro: R$ ${Number(closure.cashCount).toFixed(2).replace('.', ',')}`);
+        doc.text(
+          `Dinheiro: R$ ${Number(closure.cashCount).toFixed(2).replace('.', ',')}`,
+        );
       }
       if (closure.cardCount) {
-        doc.text(`Cartão: R$ ${Number(closure.cardCount).toFixed(2).replace('.', ',')}`);
+        doc.text(
+          `Cartão: R$ ${Number(closure.cardCount).toFixed(2).replace('.', ',')}`,
+        );
       }
       if (closure.pixCount) {
-        doc.text(`PIX: R$ ${Number(closure.pixCount).toFixed(2).replace('.', ',')}`);
+        doc.text(
+          `PIX: R$ ${Number(closure.pixCount).toFixed(2).replace('.', ',')}`,
+        );
       }
       doc.moveDown();
     }
@@ -215,14 +279,22 @@ export class ReportsService {
         doc.addPage();
       }
 
-      const description = t.description || 
-        (t.appointment?.patient?.name ? `${t.appointment.procedure?.name || t.category} - ${t.appointment.patient.name}` : null) ||
+      const description =
+        t.description ||
+        (t.appointment?.patient?.name
+          ? `${t.appointment.procedure?.name || t.category} - ${t.appointment.patient.name}`
+          : null) ||
         (t.patient?.name ? `${t.category} - ${t.patient.name}` : null) ||
         t.category ||
         'Sem descrição';
 
-      doc.text(`${index + 1}. ${formatDateBR(t.createdAt, 'HH:mm')} - ${description}`);
-      doc.text(`   ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'}: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `${index + 1}. ${formatDateBR(t.createdAt, 'HH:mm')} - ${description}`,
+      );
+      doc.text(
+        `   ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'}: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.text(`   Método: ${t.method || 'Não informado'}`, { indent: 20 });
       if (t.createdBy) {
         doc.text(`   Por: ${t.createdBy.name}`, { indent: 20 });
@@ -281,32 +353,40 @@ export class ReportsService {
       where.patientId = patientId;
     }
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where,
-      include: {
-        patient: { select: { name: true, cpf: true } },
-        appointment: {
-          include: {
-            patient: { select: { name: true, cpf: true } },
-            procedure: { select: { name: true, grossAmount: true } },
-            staff: { select: { name: true } },
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where,
+        include: {
+          patient: { select: { name: true, cpf: true } },
+          appointment: {
+            include: {
+              patient: { select: { name: true, cpf: true } },
+              procedure: { select: { name: true, grossAmount: true } },
+              staff: { select: { name: true } },
+            },
           },
+          staff: { select: { name: true } },
+          createdBy: { select: { name: true } },
         },
-        staff: { select: { name: true } },
-        createdBy: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true },
+    const tenant = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
     });
 
     // Agrupar por procedimento
-    const byProcedure: Record<string, { count: number; total: number; items: any[] }> = {};
-    transactions.forEach(t => {
-      const procedureName = t.appointment?.procedure?.name || t.category || 'Outros';
+    const byProcedure: Record<
+      string,
+      { count: number; total: number; items: any[] }
+    > = {};
+    transactions.forEach((t) => {
+      const procedureName =
+        t.appointment?.procedure?.name || t.category || 'Outros';
       if (!byProcedure[procedureName]) {
         byProcedure[procedureName] = { count: 0, total: 0, items: [] };
       }
@@ -315,7 +395,10 @@ export class ReportsService {
       byProcedure[procedureName].items.push(t);
     });
 
-    const totalAmount = transactions.reduce((acc, t) => acc + Number(t.amount), 0);
+    const totalAmount = transactions.reduce(
+      (acc, t) => acc + Number(t.amount),
+      0,
+    );
 
     // Gerar PDF
     const doc = new PDFDocument({ margin: 50 });
@@ -328,33 +411,41 @@ export class ReportsService {
     doc.moveDown();
     doc.fontSize(12).text(tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Período: ${format(start, "dd/MM/yyyy", { locale: ptBR })} a ${format(end, "dd/MM/yyyy", { locale: ptBR })}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `Período: ${format(start, 'dd/MM/yyyy', { locale: ptBR })} a ${format(end, 'dd/MM/yyyy', { locale: ptBR })}`,
+        { align: 'center' },
+      );
     doc.moveDown();
 
     // Filtros aplicados
     if (procedureId || staffId || patientId) {
       doc.fontSize(10).text('Filtros Aplicados:', { underline: true });
       if (procedureId) {
-        const procedure = await this.prisma.client.procedure.findUnique({
-          where: { id: procedureId },
-          select: { name: true },
+        const procedure = await this.prisma.withTenant(tenantId, async (tx) => {
+          return tx.procedure.findUnique({
+            where: { id: procedureId },
+            select: { name: true },
+          });
         });
         doc.text(`Procedimento: ${procedure?.name || procedureId}`);
       }
       if (staffId) {
-        const staff = await this.prisma.client.staff.findUnique({
-          where: { id: staffId },
-          select: { name: true },
+        const staff = await this.prisma.withTenant(tenantId, async (tx) => {
+          return tx.staff.findUnique({
+            where: { id: staffId },
+            select: { name: true },
+          });
         });
         doc.text(`Médico: ${staff?.name || staffId}`);
       }
       if (patientId) {
-        const patient = await this.prisma.client.patient.findUnique({
-          where: { id: patientId },
-          select: { name: true },
+        const patient = await this.prisma.withTenant(tenantId, async (tx) => {
+          return tx.patient.findUnique({
+            where: { id: patientId },
+            select: { name: true },
+          });
         });
         doc.text(`Paciente: ${patient?.name || patientId}`);
       }
@@ -368,7 +459,9 @@ export class ReportsService {
     Object.entries(byProcedure).forEach(([procedure, data]) => {
       doc.text(`${procedure}:`);
       doc.text(`  Quantidade: ${data.count}`, { indent: 20 });
-      doc.text(`  Total: R$ ${data.total.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(`  Total: R$ ${data.total.toFixed(2).replace('.', ',')}`, {
+        indent: 20,
+      });
       doc.moveDown(0.3);
     });
     doc.moveDown();
@@ -391,15 +484,21 @@ export class ReportsService {
         doc.addPage();
       }
 
-      const patientName = t.appointment?.patient?.name || t.patient?.name || 'Não informado';
-      const procedureName = t.appointment?.procedure?.name || t.category || 'Não informado';
-      const doctorName = t.appointment?.staff?.name || t.staff?.name || 'Não informado';
+      const patientName =
+        t.appointment?.patient?.name || t.patient?.name || 'Não informado';
+      const procedureName =
+        t.appointment?.procedure?.name || t.category || 'Não informado';
+      const doctorName =
+        t.appointment?.staff?.name || t.staff?.name || 'Não informado';
 
       doc.text(`${index + 1}. ${formatDateTimeBR(t.createdAt)}`);
       doc.text(`   Paciente: ${patientName}`, { indent: 20 });
       doc.text(`   Procedimento: ${procedureName}`, { indent: 20 });
       doc.text(`   Médico: ${doctorName}`, { indent: 20 });
-      doc.text(`   Valor: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.text(`   Método: ${t.method || 'Não informado'}`, { indent: 20 });
       doc.moveDown(0.3);
     });
@@ -413,7 +512,12 @@ export class ReportsService {
     });
   }
 
-  async generateMedicalFeeReport(tenantId: string, paymentId: string, userRole?: string, userStaffId?: string): Promise<Buffer> {
+  async generateMedicalFeeReport(
+    tenantId: string,
+    paymentId: string,
+    userRole?: string,
+    userStaffId?: string,
+  ): Promise<Buffer> {
     const where: any = {
       id: paymentId,
       tenantId,
@@ -424,33 +528,37 @@ export class ReportsService {
       where.staffId = userStaffId;
     }
 
-    const payment = await this.prisma.client.medicalFeePayment.findFirst({
-      where,
-      include: {
-        staff: { select: { name: true, specialty: true, crm: true } },
-        paidByUser: { select: { name: true } },
-        fees: {
-          include: {
-            transaction: {
-              include: {
-                appointment: {
-                  include: {
-                    patient: { select: { name: true, cpf: true } },
-                    procedure: { select: { name: true, grossAmount: true } },
+    const payment = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFeePayment.findFirst({
+        where,
+        include: {
+          staff: { select: { name: true, specialty: true, crm: true } },
+          paidByUser: { select: { name: true } },
+          fees: {
+            include: {
+              transaction: {
+                include: {
+                  appointment: {
+                    include: {
+                      patient: { select: { name: true, cpf: true } },
+                      procedure: { select: { name: true, grossAmount: true } },
+                    },
                   },
                 },
               },
             },
+            orderBy: { createdAt: 'asc' },
           },
-          orderBy: { createdAt: 'asc' },
+          tenant: { select: { name: true } },
         },
-        tenant: { select: { name: true } },
-      },
+      });
     });
 
     if (!payment) {
       if (userRole === UserRole.DOCTOR) {
-        throw new ForbiddenException('Você não tem permissão para acessar este relatório.');
+        throw new ForbiddenException(
+          'Você não tem permissão para acessar este relatório.',
+        );
       }
       throw new NotFoundException('Fechamento de repasse não encontrado.');
     }
@@ -466,10 +574,12 @@ export class ReportsService {
     doc.moveDown();
     doc.fontSize(12).text(payment.tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Período: ${formatDateOnlyBR(payment.periodStart)} a ${formatDateOnlyBR(payment.periodEnd)}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `Período: ${formatDateOnlyBR(payment.periodStart)} a ${formatDateOnlyBR(payment.periodEnd)}`,
+        { align: 'center' },
+      );
     doc.moveDown();
 
     // Informações do médico
@@ -490,7 +600,9 @@ export class ReportsService {
     doc.moveDown(0.5);
     doc.fontSize(10);
     doc.text(`Quantidade de Atendimentos: ${payment.feesCount}`);
-    doc.text(`Valor Total a Receber: R$ ${Number(payment.totalAmount).toFixed(2).replace('.', ',')}`);
+    doc.text(
+      `Valor Total a Receber: R$ ${Number(payment.totalAmount).toFixed(2).replace('.', ',')}`,
+    );
     doc.text(`Data de Pagamento: ${formatDateTimeBR(payment.paidAt)}`);
     if (payment.paymentMethod) {
       doc.text(`Método de Pagamento: ${payment.paymentMethod}`);
@@ -507,8 +619,10 @@ export class ReportsService {
         doc.addPage();
       }
 
-      const patientName = fee.transaction.appointment?.patient?.name || 'Não informado';
-      const procedureName = fee.transaction.appointment?.procedure?.name || 'Não informado';
+      const patientName =
+        fee.transaction.appointment?.patient?.name || 'Não informado';
+      const procedureName =
+        fee.transaction.appointment?.procedure?.name || 'Não informado';
       const grossAmount = Number(fee.grossAmount);
       const feeAmount = Number(fee.feeAmount);
       const commissionRate = Number(fee.commissionRate);
@@ -516,9 +630,15 @@ export class ReportsService {
       doc.text(`${index + 1}. ${formatDateOnlyBR(fee.createdAt)}`);
       doc.text(`   Paciente: ${patientName}`, { indent: 20 });
       doc.text(`   Procedimento: ${procedureName}`, { indent: 20 });
-      doc.text(`   Valor Bruto: R$ ${grossAmount.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor Bruto: R$ ${grossAmount.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.text(`   Tipo de Repasse: ${commissionRate}%`, { indent: 20 });
-      doc.text(`   Valor Líquido: R$ ${feeAmount.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor Líquido: R$ ${feeAmount.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.moveDown(0.3);
     });
 
@@ -538,7 +658,9 @@ export class ReportsService {
     doc.text('Assinatura do Profissional', { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(8);
-    doc.text('Atesto o recebimento do valor acima descrito', { align: 'center' });
+    doc.text('Atesto o recebimento do valor acima descrito', {
+      align: 'center',
+    });
     doc.fontSize(10); // Resetar para tamanho padrão
 
     return new Promise((resolve, reject) => {
@@ -562,44 +684,53 @@ export class ReportsService {
     end.setHours(23, 59, 59, 999);
 
     // Buscar repasses pendentes
-    const fees = await this.prisma.client.medicalFee.findMany({
-      where: {
-        tenantId,
-        staffId,
-        status: 'pending',
-        transaction: {
-          createdAt: {
-            gte: start,
-            lte: end,
+    const fees = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.medicalFee.findMany({
+        where: {
+          tenantId,
+          staffId,
+          status: 'pending',
+          transaction: {
+            createdAt: {
+              gte: start,
+              lte: end,
+            },
           },
         },
-      },
-      include: {
-        staff: { select: { name: true, specialty: true, crm: true } },
-        transaction: {
-          include: {
-            appointment: {
-              include: {
-                patient: { select: { name: true, cpf: true } },
-                procedure: { select: { name: true, grossAmount: true } },
+        include: {
+          staff: { select: { name: true, specialty: true, crm: true } },
+          transaction: {
+            include: {
+              appointment: {
+                include: {
+                  patient: { select: { name: true, cpf: true } },
+                  procedure: { select: { name: true, grossAmount: true } },
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
     if (fees.length === 0) {
-      throw new NotFoundException('Nenhum repasse pendente encontrado para o período selecionado.');
+      throw new NotFoundException(
+        'Nenhum repasse pendente encontrado para o período selecionado.',
+      );
     }
 
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true },
+    const tenant = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
     });
 
-    const totalAmount = fees.reduce((acc, fee) => acc + Number(fee.feeAmount), 0);
+    const totalAmount = fees.reduce(
+      (acc, fee) => acc + Number(fee.feeAmount),
+      0,
+    );
 
     // Gerar PDF
     const doc = new PDFDocument({ margin: 50 });
@@ -612,10 +743,12 @@ export class ReportsService {
     doc.moveDown();
     doc.fontSize(12).text(tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Período: ${format(start, "dd/MM/yyyy", { locale: ptBR })} a ${format(end, "dd/MM/yyyy", { locale: ptBR })}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `Período: ${format(start, 'dd/MM/yyyy', { locale: ptBR })} a ${format(end, 'dd/MM/yyyy', { locale: ptBR })}`,
+        { align: 'center' },
+      );
     doc.moveDown();
 
     // Informações do médico
@@ -636,7 +769,9 @@ export class ReportsService {
     doc.moveDown(0.5);
     doc.fontSize(10);
     doc.text(`Quantidade de Atendimentos: ${fees.length}`);
-    doc.text(`Valor Total Pendente: R$ ${totalAmount.toFixed(2).replace('.', ',')}`);
+    doc.text(
+      `Valor Total Pendente: R$ ${totalAmount.toFixed(2).replace('.', ',')}`,
+    );
     doc.moveDown();
 
     // Lista detalhada
@@ -649,8 +784,10 @@ export class ReportsService {
         doc.addPage();
       }
 
-      const patientName = fee.transaction.appointment?.patient?.name || 'Não informado';
-      const procedureName = fee.transaction.appointment?.procedure?.name || 'Não informado';
+      const patientName =
+        fee.transaction.appointment?.patient?.name || 'Não informado';
+      const procedureName =
+        fee.transaction.appointment?.procedure?.name || 'Não informado';
       const grossAmount = Number(fee.grossAmount);
       const feeAmount = Number(fee.feeAmount);
       const commissionRate = Number(fee.commissionRate);
@@ -658,9 +795,15 @@ export class ReportsService {
       doc.text(`${index + 1}. ${formatDateOnlyBR(fee.createdAt)}`);
       doc.text(`   Paciente: ${patientName}`, { indent: 20 });
       doc.text(`   Procedimento: ${procedureName}`, { indent: 20 });
-      doc.text(`   Valor Bruto: R$ ${grossAmount.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor Bruto: R$ ${grossAmount.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.text(`   Tipo de Repasse: ${commissionRate}%`, { indent: 20 });
-      doc.text(`   Valor do Repasse: R$ ${feeAmount.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor do Repasse: R$ ${feeAmount.toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.moveDown(0.3);
     });
 
@@ -668,7 +811,10 @@ export class ReportsService {
     doc.moveDown(2);
     doc.fontSize(9);
     doc.fillColor('gray');
-    doc.text('* Este relatório mostra os repasses pendentes que ainda não foram fechados.', { align: 'center' });
+    doc.text(
+      '* Este relatório mostra os repasses pendentes que ainda não foram fechados.',
+      { align: 'center' },
+    );
     doc.fillColor('black');
 
     return new Promise((resolve, reject) => {
@@ -703,22 +849,28 @@ export class ReportsService {
       where.createdById = userId;
     }
 
-    const closures = await this.prisma.client.dailyClosure.findMany({
-      where,
-      include: {
-        closedBy: { select: { name: true, email: true } },
-        tenant: { select: { name: true } },
-      },
-      orderBy: [{ date: 'desc' }, { closureType: 'asc' }],
+    const closures = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.dailyClosure.findMany({
+        where,
+        include: {
+          closedBy: { select: { name: true, email: true } },
+          tenant: { select: { name: true } },
+        },
+        orderBy: [{ date: 'desc' }, { closureType: 'asc' }],
+      });
     });
 
     if (closures.length === 0) {
-      throw new NotFoundException('Nenhum fechamento de caixa encontrado para o período selecionado.');
+      throw new NotFoundException(
+        'Nenhum fechamento de caixa encontrado para o período selecionado.',
+      );
     }
 
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true },
+    const tenant = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
     });
 
     // Gerar PDF
@@ -728,14 +880,18 @@ export class ReportsService {
     doc.on('data', buffers.push.bind(buffers));
 
     // Cabeçalho
-    doc.fontSize(20).text('RELATÓRIO DE FECHAMENTOS DE CAIXA', { align: 'center' });
+    doc
+      .fontSize(20)
+      .text('RELATÓRIO DE FECHAMENTOS DE CAIXA', { align: 'center' });
     doc.moveDown();
     doc.fontSize(12).text(tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Período: ${format(start, "dd/MM/yyyy", { locale: ptBR })} a ${format(end, "dd/MM/yyyy", { locale: ptBR })}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `Período: ${format(start, 'dd/MM/yyyy', { locale: ptBR })} a ${format(end, 'dd/MM/yyyy', { locale: ptBR })}`,
+        { align: 'center' },
+      );
     if (userId) {
       const user = closures[0]?.closedBy;
       if (user) {
@@ -745,25 +901,52 @@ export class ReportsService {
     doc.moveDown();
 
     // Resumo geral
-    const totalIncome = closures.reduce((acc, c) => acc + Number(c.totalIncome), 0);
-    const totalExpense = closures.reduce((acc, c) => acc + Number(c.totalExpense), 0);
+    const totalIncome = closures.reduce(
+      (acc, c) => acc + Number(c.totalIncome),
+      0,
+    );
+    const totalExpense = closures.reduce(
+      (acc, c) => acc + Number(c.totalExpense),
+      0,
+    );
     const totalNet = closures.reduce((acc, c) => acc + Number(c.netBalance), 0);
-    const totalCash = closures.reduce((acc, c) => acc + Number(c.cashCount || 0), 0);
-    const totalCard = closures.reduce((acc, c) => acc + Number(c.cardCount || 0), 0);
-    const totalPix = closures.reduce((acc, c) => acc + Number(c.pixCount || 0), 0);
+    const totalCash = closures.reduce(
+      (acc, c) => acc + Number(c.cashCount || 0),
+      0,
+    );
+    const totalCard = closures.reduce(
+      (acc, c) => acc + Number(c.cardCount || 0),
+      0,
+    );
+    const totalPix = closures.reduce(
+      (acc, c) => acc + Number(c.pixCount || 0),
+      0,
+    );
 
     doc.fontSize(12).text('RESUMO DO PERÍODO', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10);
     doc.text(`Total de Fechamentos: ${closures.length}`);
-    doc.text(`Total de Entradas: R$ ${totalIncome.toFixed(2).replace('.', ',')}`);
-    doc.text(`Total de Saídas: R$ ${totalExpense.toFixed(2).replace('.', ',')}`);
-    doc.text(`Saldo Líquido Total: R$ ${totalNet.toFixed(2).replace('.', ',')}`);
+    doc.text(
+      `Total de Entradas: R$ ${totalIncome.toFixed(2).replace('.', ',')}`,
+    );
+    doc.text(
+      `Total de Saídas: R$ ${totalExpense.toFixed(2).replace('.', ',')}`,
+    );
+    doc.text(
+      `Saldo Líquido Total: R$ ${totalNet.toFixed(2).replace('.', ',')}`,
+    );
     doc.moveDown(0.5);
     doc.text('Totais por Conferência Física:');
-    doc.text(`  Dinheiro: R$ ${totalCash.toFixed(2).replace('.', ',')}`, { indent: 20 });
-    doc.text(`  Cartão: R$ ${totalCard.toFixed(2).replace('.', ',')}`, { indent: 20 });
-    doc.text(`  PIX: R$ ${totalPix.toFixed(2).replace('.', ',')}`, { indent: 20 });
+    doc.text(`  Dinheiro: R$ ${totalCash.toFixed(2).replace('.', ',')}`, {
+      indent: 20,
+    });
+    doc.text(`  Cartão: R$ ${totalCard.toFixed(2).replace('.', ',')}`, {
+      indent: 20,
+    });
+    doc.text(`  PIX: R$ ${totalPix.toFixed(2).replace('.', ',')}`, {
+      indent: 20,
+    });
     doc.moveDown();
 
     // Lista de fechamentos
@@ -776,36 +959,65 @@ export class ReportsService {
       }
 
       doc.fontSize(10).fillColor('blue');
-      doc.text(`${index + 1}. ${formatDateOnlyBR(closure.date)} - ${closure.closureType === 'RECEPTIONIST' ? 'Caixa de Recepcionista' : 'Caixa Administrativo'}`);
+      doc.text(
+        `${index + 1}. ${formatDateOnlyBR(closure.date)} - ${closure.closureType === 'RECEPTIONIST' ? 'Caixa de Recepcionista' : 'Caixa Administrativo'}`,
+      );
       doc.fillColor('black');
       doc.fontSize(9);
       doc.text(`   Responsável: ${closure.closedBy.name}`, { indent: 20 });
-      doc.text(`   Saldo Inicial: R$ ${Number(closure.initialBalance).toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`   Entradas: R$ ${Number(closure.totalIncome).toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`   Saídas: R$ ${Number(closure.totalExpense).toFixed(2).replace('.', ',')}`, { indent: 20 });
-      doc.text(`   Saldo Final: R$ ${Number(closure.finalBalance).toFixed(2).replace('.', ',')}`, { indent: 20 });
-      
+      doc.text(
+        `   Saldo Inicial: R$ ${Number(closure.initialBalance).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
+      doc.text(
+        `   Entradas: R$ ${Number(closure.totalIncome).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
+      doc.text(
+        `   Saídas: R$ ${Number(closure.totalExpense).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
+      doc.text(
+        `   Saldo Final: R$ ${Number(closure.finalBalance).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
+
       if (closure.cashCount || closure.cardCount || closure.pixCount) {
-        doc.text(`   Conferência: Dinheiro R$ ${Number(closure.cashCount || 0).toFixed(2).replace('.', ',')} | Cartão R$ ${Number(closure.cardCount || 0).toFixed(2).replace('.', ',')} | PIX R$ ${Number(closure.pixCount || 0).toFixed(2).replace('.', ',')}`, { indent: 20 });
+        doc.text(
+          `   Conferência: Dinheiro R$ ${Number(closure.cashCount || 0)
+            .toFixed(2)
+            .replace('.', ',')} | Cartão R$ ${Number(closure.cardCount || 0)
+            .toFixed(2)
+            .replace('.', ',')} | PIX R$ ${Number(closure.pixCount || 0)
+            .toFixed(2)
+            .replace('.', ',')}`,
+          { indent: 20 },
+        );
       }
-      
+
       if (closure.difference && Number(closure.difference) !== 0) {
         doc.fillColor('red');
-        doc.text(`   Diferença: R$ ${Number(closure.difference).toFixed(2).replace('.', ',')}`, { indent: 20 });
+        doc.text(
+          `   Diferença: R$ ${Number(closure.difference).toFixed(2).replace('.', ',')}`,
+          { indent: 20 },
+        );
         doc.fillColor('black');
       }
-      
+
       if (closure.observations) {
         doc.text(`   Obs: ${closure.observations}`, { indent: 20 });
       }
-      
+
       doc.moveDown(0.5);
     });
 
     // Rodapé
     doc.moveDown(2);
     doc.fontSize(8).fillColor('gray');
-    doc.text(`Relatório gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, { align: 'center' });
+    doc.text(
+      `Relatório gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+      { align: 'center' },
+    );
     doc.fillColor('black');
 
     return new Promise((resolve, reject) => {
@@ -842,28 +1054,36 @@ export class ReportsService {
       where.categoryId = categoryId;
     }
 
-    const transactions = await this.prisma.client.transaction.findMany({
-      where,
-      include: {
-        expenseCategory: {
-          include: {
-            parent: { select: { name: true } },
+    const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.transaction.findMany({
+        where,
+        include: {
+          expenseCategory: {
+            include: {
+              parent: { select: { name: true } },
+            },
           },
+          createdBy: { select: { name: true } },
         },
-        createdBy: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      });
     });
 
-    const tenant = await this.prisma.client.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true },
+    const tenant = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
     });
 
     // Agrupar por categoria
-    const byCategory: Record<string, { count: number; total: number; items: any[] }> = {};
-    transactions.forEach(t => {
-      const categoryName = t.expenseCategory?.name || t.category || 'Sem categoria';
+    const byCategory: Record<
+      string,
+      { count: number; total: number; items: any[] }
+    > = {};
+    transactions.forEach((t) => {
+      const categoryName =
+        t.expenseCategory?.name || t.category || 'Sem categoria';
       if (!byCategory[categoryName]) {
         byCategory[categoryName] = { count: 0, total: 0, items: [] };
       }
@@ -872,7 +1092,10 @@ export class ReportsService {
       byCategory[categoryName].items.push(t);
     });
 
-    const totalAmount = transactions.reduce((acc, t) => acc + Number(t.amount), 0);
+    const totalAmount = transactions.reduce(
+      (acc, t) => acc + Number(t.amount),
+      0,
+    );
 
     // Gerar PDF
     const doc = new PDFDocument({ margin: 50 });
@@ -885,17 +1108,21 @@ export class ReportsService {
     doc.moveDown();
     doc.fontSize(12).text(tenant?.name || '', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(
-      `Período: ${format(start, "dd/MM/yyyy", { locale: ptBR })} a ${format(end, "dd/MM/yyyy", { locale: ptBR })}`,
-      { align: 'center' }
-    );
+    doc
+      .fontSize(10)
+      .text(
+        `Período: ${format(start, 'dd/MM/yyyy', { locale: ptBR })} a ${format(end, 'dd/MM/yyyy', { locale: ptBR })}`,
+        { align: 'center' },
+      );
     doc.moveDown();
 
     // Filtros
     if (categoryId) {
-      const category = await this.prisma.client.expenseCategory.findUnique({
-        where: { id: categoryId },
-        select: { name: true },
+      const category = await this.prisma.withTenant(tenantId, async (tx) => {
+        return tx.expenseCategory.findUnique({
+          where: { id: categoryId },
+          select: { name: true },
+        });
       });
       doc.fontSize(10).text(`Categoria: ${category?.name || categoryId}`);
       doc.moveDown();
@@ -908,7 +1135,9 @@ export class ReportsService {
     Object.entries(byCategory).forEach(([category, data]) => {
       doc.text(`${category}:`);
       doc.text(`  Quantidade: ${data.count}`, { indent: 20 });
-      doc.text(`  Total: R$ ${data.total.toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(`  Total: R$ ${data.total.toFixed(2).replace('.', ',')}`, {
+        indent: 20,
+      });
       doc.moveDown(0.3);
     });
     doc.moveDown();
@@ -931,13 +1160,17 @@ export class ReportsService {
         doc.addPage();
       }
 
-      const categoryName = t.expenseCategory?.name || t.category || 'Sem categoria';
+      const categoryName =
+        t.expenseCategory?.name || t.category || 'Sem categoria';
       const description = t.description || 'Sem descrição';
 
       doc.text(`${index + 1}. ${formatDateTimeBR(t.createdAt)}`);
       doc.text(`   Categoria: ${categoryName}`, { indent: 20 });
       doc.text(`   Descrição: ${description}`, { indent: 20 });
-      doc.text(`   Valor: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`, { indent: 20 });
+      doc.text(
+        `   Valor: R$ ${Number(t.amount).toFixed(2).replace('.', ',')}`,
+        { indent: 20 },
+      );
       doc.text(`   Método: ${t.method || 'Não informado'}`, { indent: 20 });
       if (t.createdBy) {
         doc.text(`   Por: ${t.createdBy.name}`, { indent: 20 });

@@ -615,7 +615,7 @@ export default function AgendaPage() {
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                         apt.status === 'CONFIRMED' || apt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
                         apt.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700' :
-                        apt.status === 'CANCELED' || apt.status === 'canceled' || apt.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                        apt.status === 'CANCELED' || apt.status === 'canceled' ? 'bg-red-100 text-red-700' :
                         apt.status === 'COMPLETED' || apt.status === 'completed' ? 'bg-blue-100 text-blue-700' :
                         apt.status === 'IN_PROGRESS' || apt.status === 'in_progress' ? 'bg-purple-100 text-purple-700' :
                         apt.status === 'NOSHOW' ? 'bg-gray-100 text-gray-700' :
@@ -623,7 +623,7 @@ export default function AgendaPage() {
                       }`}>
                         {apt.status === 'scheduled' ? 'AGENDADO' :
                          apt.status === 'confirmed' || apt.status === 'CONFIRMED' ? 'CONFIRMADO' :
-                         apt.status === 'canceled' || apt.status === 'CANCELED' || apt.status === 'cancelled' ? 'CANCELADO' :
+                         apt.status === 'canceled' || apt.status === 'CANCELED' ? 'CANCELADO' :
                          apt.status === 'completed' || apt.status === 'COMPLETED' ? 'REALIZADO' :
                          apt.status === 'in_progress' || apt.status === 'IN_PROGRESS' ? 'EM ATENDIMENTO' :
                          apt.status === 'NOSHOW' ? 'NÃO COMPARECEU' :
@@ -634,7 +634,7 @@ export default function AgendaPage() {
 
                   <div className="flex items-center gap-2">
                     {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'receptionist') && 
-                     apt.status !== 'cancelled' && apt.status !== 'canceled' && apt.status !== 'completed' && (
+                     apt.status !== 'canceled' && apt.status !== 'completed' && (
                       <button
                         onClick={() => handleOpenBillingModal(apt)}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"

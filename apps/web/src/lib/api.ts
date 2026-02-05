@@ -2,13 +2,15 @@ import axios from 'axios';
 
 // Detectar automaticamente o IP do servidor baseado no hostname atual
 const getApiUrl = () => {
+  const defaultLocalApi = 'http://127.0.0.1:3001';
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    return process.env.NEXT_PUBLIC_API_URL || defaultLocalApi;
   }
   
   // Se estiver em localhost, usar localhost
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // Em Windows, "localhost" pode resolver para IPv6 (::1) e causar ECONNREFUSED se a API estiver só no IPv4.
+    return process.env.NEXT_PUBLIC_API_URL || defaultLocalApi;
   }
   
   // Se estiver acessando via IP, usar o mesmo IP para a API

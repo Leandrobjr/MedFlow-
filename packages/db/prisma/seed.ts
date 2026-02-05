@@ -159,15 +159,38 @@ async function seedExpenseCategories(tenantId: string) {
 
 async function main() { 
   const password = await bcrypt.hash('admin123', 10); 
-  const tenant = await prisma.tenant.upsert({ 
-    where: { slug: 'clinica1' }, 
-    update: {}, 
-    create: { name: 'Clínica de Teste', slug: 'clinica1' }, 
-  }); 
+
+  // Garantir tenants oficiais
+  let medflowTenant = await prisma.tenant.findUnique({ where: { slug: 'medflow' } });
+
+  // Se existir clinica1 e medflow ainda não existir, renomear clinica1 -> medflow
+  if (!medflowTenant) {
+    const clinica1 = await prisma.tenant.findUnique({ where: { slug: 'clinica1' } });
+    if (clinica1) {
+      medflowTenant = await prisma.tenant.update({
+        where: { id: clinica1.id },
+        data: { slug: 'medflow', name: 'MedFlow' },
+      });
+    }
+  }
+
+  if (!medflowTenant) {
+    medflowTenant = await prisma.tenant.create({
+      data: { name: 'MedFlow', slug: 'medflow' },
+    });
+  }
+
+  await prisma.tenant.upsert({
+    where: { slug: 'medflow1' },
+    update: { name: 'MedFlow 1' },
+    create: { name: 'MedFlow 1', slug: 'medflow1' },
+  });
+
+  // Garantir usuário admin no tenant medflow
   await prisma.user.upsert({ 
     where: { email: 'admin@medflow.local' }, 
-    update: {}, 
-    create: { email: 'admin@medflow.local', name: 'Administrador', password, role: 'owner', tenantId: tenant.id }, 
+    update: { name: 'Administrador', password, role: 'owner', tenantId: medflowTenant.id }, 
+    create: { email: 'admin@medflow.local', name: 'Administrador', password, role: 'owner', tenantId: medflowTenant.id }, 
   }); 
   
   // Seed categorias de despesas para todos os tenants

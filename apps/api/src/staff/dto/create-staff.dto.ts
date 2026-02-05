@@ -1,4 +1,14 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber, IsBoolean, IsArray, IsUUID } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  IsUUID,
+} from 'class-validator';
 import { UserRole } from '../../common/shared-types';
 
 export class CreateStaffDto {
@@ -64,7 +74,9 @@ export class CreateStaffDto {
 
   @IsArray()
   @IsOptional()
-  @IsUUID(undefined, { each: true, message: 'Cada ID de procedimento deve ser um UUID válido' })
+  @IsUUID(undefined, {
+    each: true,
+    message: 'Cada ID de procedimento deve ser um UUID válido',
+  })
   procedureIds?: string[];
 }
-

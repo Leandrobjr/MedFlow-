@@ -8,24 +8,30 @@ export class SuppliersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, createSupplierDto: CreateSupplierDto) {
-    return this.prisma.client.supplier.create({
-      data: {
-        ...createSupplierDto,
-        tenantId,
-      },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.supplier.create({
+        data: {
+          ...createSupplierDto,
+          tenantId,
+        },
+      });
     });
   }
 
   async findAll(tenantId: string) {
-    return this.prisma.client.supplier.findMany({
-      where: { tenantId },
-      orderBy: { name: 'asc' },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.supplier.findMany({
+        where: { tenantId },
+        orderBy: { name: 'asc' },
+      });
     });
   }
 
   async findOne(tenantId: string, id: string) {
-    const supplier = await this.prisma.client.supplier.findFirst({
-      where: { id, tenantId },
+    const supplier = await this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.supplier.findFirst({
+        where: { id, tenantId },
+      });
     });
 
     if (!supplier) {
@@ -35,13 +41,19 @@ export class SuppliersService {
     return supplier;
   }
 
-  async update(tenantId: string, id: string, updateSupplierDto: UpdateSupplierDto) {
+  async update(
+    tenantId: string,
+    id: string,
+    updateSupplierDto: UpdateSupplierDto,
+  ) {
     // Verificar se o fornecedor existe
     await this.findOne(tenantId, id);
 
-    return this.prisma.client.supplier.update({
-      where: { id },
-      data: updateSupplierDto,
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.supplier.update({
+        where: { id },
+        data: updateSupplierDto,
+      });
     });
   }
 
@@ -49,8 +61,10 @@ export class SuppliersService {
     // Verificar se o fornecedor existe
     await this.findOne(tenantId, id);
 
-    return this.prisma.client.supplier.delete({
-      where: { id },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      return tx.supplier.delete({
+        where: { id },
+      });
     });
   }
 }

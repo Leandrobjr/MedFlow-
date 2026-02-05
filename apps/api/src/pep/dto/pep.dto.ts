@@ -93,5 +93,3 @@ export class CreateAddendumDto {
   @IsNotEmpty({ message: 'O conteúdo do adendo não pode ser vazio' })
   content: string;
 }
-
-

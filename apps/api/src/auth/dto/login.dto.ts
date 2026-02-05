@@ -1,4 +1,10 @@
-import { IsEmail, IsNotEmpty, MinLength, IsBoolean, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  MinLength,
+  IsBoolean,
+  IsOptional,
+} from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'E-mail inválido' })
@@ -13,5 +19,3 @@ export class LoginDto {
   @IsOptional()
   rememberMe?: boolean;
 }
-
-
