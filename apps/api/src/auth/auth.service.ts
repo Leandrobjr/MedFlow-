@@ -10,6 +10,7 @@ type SafeUserForToken = {
   name: string;
   role: string;
   tenantId: string | null;
+  staffId?: string;
 };
 
 @Injectable()
@@ -86,6 +87,7 @@ export class AuthService {
       name: user.name,
       role: user.role,
       tenantId: user.tenantId,
+      ...(user.staffId && { staffId: user.staffId }),
     };
 
     const options: JwtSignOptions = {

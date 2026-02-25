@@ -68,8 +68,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Pequeno delay para garantir que o cookie foi gravado pelo navegador
       setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 800);
+        const role = response.data?.user?.role ?? '';
+        const target = role === 'doctor' ? '/dashboard' : '/dashboard/agenda';
+        window.location.href = target;
+      }, 200);      
     } catch (error: any) {
       const message = error.response?.data?.message || 'Erro ao realizar login';
       toast.error(message);

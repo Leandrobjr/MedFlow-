@@ -48,12 +48,20 @@ export class AuthController {
   ) {
     const user = await this.authService.validateUser(dto.email, dto.password);
 
+    const staffId =
+      user.tenantId != null
+        ? await this.prisma.withTenant(user.tenantId, (tx) =>
+            tx.staff.findFirst({ where: { userId: user.id }, select: { id: true } }),
+          ).then((s) => s?.id)
+        : undefined;
+
     const safeUser = {
       id: user.id,
       email: user.email,
       name: user.name,
       role: String(user.role),
       tenantId: user.tenantId ?? null,
+      staffId,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -74,6 +82,7 @@ export class AuthController {
         email: safeUser.email,
         name: safeUser.name,
         role: safeUser.role,
+        staffId: safeUser.staffId ?? null,
       },
     };
   }
@@ -118,12 +127,20 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token inválido');
     }
 
+    const staffId =
+      user.tenantId != null
+        ? await this.prisma.withTenant(user.tenantId, (tx) =>
+            tx.staff.findFirst({ where: { userId: user.id }, select: { id: true } }),
+          ).then((s) => s?.id)
+        : undefined;
+
     const safeUser = {
       id: user.id,
       email: user.email,
       name: user.name,
       role: String(user.role),
       tenantId: user.tenantId ?? null,
+      staffId,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -143,6 +160,7 @@ export class AuthController {
         email: safeUser.email,
         name: safeUser.name,
         role: safeUser.role,
+        staffId: safeUser.staffId ?? null,
       },
     };
   }

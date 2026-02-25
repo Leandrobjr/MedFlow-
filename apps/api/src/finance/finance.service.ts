@@ -819,6 +819,21 @@ export class FinanceService {
         },
       });
 
+      // Registrar transação de saída para o pagamento do repasse
+      await tx.transaction.create({
+        data: {
+          tenantId,
+          type: 'expense',
+          category: 'Repasse Médico',
+          amount: totalAmount,
+          method: dto.paymentMethod || 'Dinheiro',
+          description: `Pagamento de repasse médico - ${staff.name} (${pendingFees.length} atendimentos)`,
+          staffId: dto.staffId,
+          status: 'completed',
+          createdById: userId,
+        },
+      });
+
       return paymentRecord;
     });
 
@@ -1534,11 +1549,9 @@ export class FinanceService {
   }
 
   async closeDailyBox(tenantId: string, dto: CreateClosureDto) {
-    // Método legado - manter para compatibilidade, mas usar os novos métodos específicos
-    const targetDate = new Date(dto.date);
-    targetDate.setHours(0, 0, 0, 0);
+    const [year, month, day] = dto.date.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
-    // 1. Verificar se já existe fechamento
     const existing = await this.prisma.withTenant(tenantId, async (tx) => {
       return tx.dailyClosure.findFirst({
         where: {
@@ -1553,10 +1566,8 @@ export class FinanceService {
       throw new BadRequestException('O caixa deste dia já está fechado.');
     }
 
-    // 2. Calcular totais do dia
-    const startOfDay = new Date(targetDate);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
     const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
       return tx.transaction.findMany({

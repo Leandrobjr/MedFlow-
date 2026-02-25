@@ -1,93 +1,91 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Req,
-  Query,
-} from '@nestjs/common';
-import { AppointmentsService } from './appointments.service';
-import { CreateAppointmentDto } from './dto/create-appointment.dto';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../common/shared-types';
-
-@Controller('appointments')
-export class AppointmentsController {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
-
-  @Post()
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
-  create(@Req() req: any, @Body() createAppointmentDto: CreateAppointmentDto) {
-    return this.appointmentsService.create(req.tenantId, createAppointmentDto);
-  }
-
-  @Get()
-  findAll(
-    @Req() req: any,
-    @Query('doctorId') doctorId?: string,
-    @Query('date') date?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
-    // Se não for admin/owner e não tiver doctorId explícito, filtrar por staffId do usuário logado
-    const userRole = req.user?.role;
-    const isAdmin = userRole === 'admin' || userRole === 'owner';
-    const isReceptionist = userRole === 'receptionist';
-    const userStaffId = req.user?.staffId;
-
-    // RECEPTIONIST pode ver todos os agendamentos (não filtra por doctorId)
-    // DOCTOR vê apenas os próprios agendamentos
-    // ADMIN/OWNER pode ver todos ou filtrar por doctorId específico
-    let finalDoctorId: string | undefined;
-
-    if (isReceptionist) {
-      // Recepcionista vê todos os agendamentos, não filtra por doctorId
-      finalDoctorId = undefined;
-    } else if (doctorId) {
-      // Se passou doctorId explicitamente, usar
-      finalDoctorId = doctorId;
-    } else if (!isAdmin && userStaffId) {
-      // Se não for admin e tiver staffId (ex: DOCTOR), filtrar pelos próprios agendamentos
-      finalDoctorId = userStaffId;
+    Controller,
+    Get,
+    Post,
+    Body,
+    Patch,
+    Param,
+    Delete,
+    Req,
+    Query,
+  } from '@nestjs/common';
+  import { AppointmentsService } from './appointments.service';
+  import { CreateAppointmentDto } from './dto/create-appointment.dto';
+  import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+  import { Roles } from '../common/decorators/roles.decorator';
+  import { UserRole } from '../common/shared-types';
+  
+  @Controller('appointments')
+  export class AppointmentsController {
+    constructor(private readonly appointmentsService: AppointmentsService) {}
+  
+    @Post()
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
+    create(@Req() req: any, @Body() createAppointmentDto: CreateAppointmentDto) {
+      return this.appointmentsService.create(req.tenantId, createAppointmentDto);
     }
-    // Se for admin e não passou doctorId, finalDoctorId fica undefined (vê todos)
-
-    return this.appointmentsService.findAll(
-      req.tenantId,
-      finalDoctorId,
-      date,
-      startDate,
-      endDate,
-    );
+  
+    @Get()
+    findAll(
+      @Req() req: any,
+      @Query('doctorId') doctorId?: string,
+      @Query('date') date?: string,
+      @Query('startDate') startDate?: string,
+      @Query('endDate') endDate?: string,
+    ) {
+      const userRole = String(req.user?.role ?? '').toLowerCase();
+      const isAdmin = userRole === 'admin' || userRole === 'owner';
+      const isReceptionist = userRole === 'receptionist';
+      const userStaffId = req.user?.staffId;
+  
+      let finalDoctorId: string | undefined;
+  
+      if (isReceptionist) {
+        finalDoctorId = undefined;
+      } else if (doctorId) {
+        finalDoctorId = doctorId;
+      } else if (!isAdmin && userStaffId) {
+        finalDoctorId = userStaffId;
+      }
+  
+      return this.appointmentsService.findAll(
+        req.tenantId,
+        finalDoctorId,
+        date,
+        startDate,
+        endDate,
+      );
+    }
+  
+    @Get(':id')
+    findOne(@Req() req: any, @Param('id') id: string) {
+      return this.appointmentsService.findOne(req.tenantId, id);
+    }
+  
+    @Patch(':id/status')
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
+    updateStatus(
+      @Req() req: any,
+      @Param('id') id: string,
+      @Body() dto: UpdateAppointmentStatusDto,
+    ) {
+      const userRole = req.user?.role;
+      const userStaffId = req.user?.staffId;
+      const currentUserId = req.user?.userId ?? req.user?.id;
+  
+      return this.appointmentsService.updateStatus(
+        req.tenantId,
+        id,
+        dto,
+        userRole,
+        userStaffId,
+        currentUserId,
+      );
+    }
+  
+    @Delete(':id')
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
+    remove(@Req() req: any, @Param('id') id: string) {
+      return this.appointmentsService.remove(req.tenantId, id);
+    }
   }
-
-  @Get(':id')
-  findOne(@Req() req: any, @Param('id') id: string) {
-    return this.appointmentsService.findOne(req.tenantId, id);
-  }
-
-  @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.DOCTOR)
-  updateStatus(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body('status') status: string,
-  ) {
-    return this.appointmentsService.updateStatus(
-      req.tenantId,
-      id,
-      status,
-      req.user?.role,
-      req.user?.staffId,
-    );
-  }
-
-  @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.OWNER)
-  remove(@Req() req: any, @Param('id') id: string) {
-    return this.appointmentsService.remove(req.tenantId, id);
-  }
-}

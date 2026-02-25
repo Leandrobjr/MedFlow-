@@ -6,116 +6,71 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+
+type Role = 'admin' | 'owner' | 'receptionist' | 'doctor' | string;
 
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, createAppointmentDto: CreateAppointmentDto) {
+  private normalizeRole(role?: Role): string {
+    return String(role ?? '').trim().toLowerCase();
+  }
+
+  private async resolveStaffIdByUserId(tx: any, tenantId: string, currentUserId?: string) {
+    if (!currentUserId) return undefined;
+
+    // IMPORTANTE:
+    // Isso pressupõe que exista staff.userId no seu schema.
+    // Se não existir, remova este fallback e garanta req.user.staffId no auth.
+    const staff = await tx.staff.findFirst({
+      where: { tenantId, userId: currentUserId },
+      select: { id: true },
+    });
+
+    return staff?.id;
+  }
+
+  private async ensureDoctorStaffId(tx: any, tenantId: string, userStaffId?: string, currentUserId?: string) {
+    if (userStaffId) return userStaffId;
+
+    const resolved = await this.resolveStaffIdByUserId(tx, tenantId, currentUserId);
+    if (!resolved) {
+      throw new ForbiddenException(
+        'Usuário médico não possui vínculo com profissional. Entre em contato com o administrador.',
+      );
+    }
+    return resolved;
+  }
+
+  async create(tenantId: string, dto: CreateAppointmentDto) {
+    const { startTime, endTime, staffId, patientId, procedureId } = dto;
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new BadRequestException('Datas inválidas.');
+    }
+    if (end <= start) {
+      throw new BadRequestException('Horário final deve ser após o inicial.');
+    }
+
     return this.prisma.withTenant(tenantId, async (tx) => {
-      const { patientId, staffId, startTime, endTime, procedureId } =
-        createAppointmentDto;
-      const start = new Date(startTime);
-      const end = new Date(endTime);
-
-      // 1. Validar se o horário de término é após o de início
-      if (end <= start) {
-        throw new BadRequestException(
-          'O horário de término deve ser após o início.',
-        );
-      }
-
-     // 2. Validar procedureId
-const procedure = await tx.procedure.findUnique({
-  where: { id: procedureId },
-});
-
-if (!procedure || procedure.tenantId !== tenantId) {
-  throw new BadRequestException(
-    'Procedimento não encontrado ou não pertence a este tenant.',
-  );
-}
-
-// 3. Validar se o USER logado é o dono do staff do agendamento (médico do agendamento)
-const appointment = await tx.appointment.findUnique({
-  where: { id },
-  select: { staffId: true },
-});
-
-if (!appointment) {
-  throw new BadRequestException('Agendamento não encontrado');
-}
-
-const staffIdFromAppointment = appointment.staffId;
-
-// Confere se o staff do agendamento pertence ao tenant e se está vinculado ao user logado
-const staff = await tx.staff.findFirst({
-  where: {
-    id: staffIdFromAppointment,
-    tenantId,
-  },
-  select: { userId: true },
-});
-
-if (!staff || staff.userId !== userId) {
-  throw new BadRequestException(
-    'Usuário médico não possui vínculo com este profissional',
-  );
-}
-
-// 3.1 Validar se o procedimento está vinculado a ESTE staff (do agendamento) neste tenant
-const staffProcedure = await tx.staffProcedure.findUnique({
-  where: {
-    tenantId_staffId_procedureId: {
-      tenantId,
-      staffId: staffIdFromAppointment,
-      procedureId,
-    },
-  },
-});
-
-if (!staffProcedure) {
-  throw new BadRequestException(
-    'Este procedimento não está vinculado ao profissional selecionado.',
-  );
-}
-
-      // 4. Usar nome do procedimento como type
-      createAppointmentDto.type = procedure.name;
-
-            // 5. Verificar conflitos de agenda para o mesmo médico
-            const conflict = await tx.appointment.findFirst({
-              where: {
-                tenantId,
-                staffId: staffIdFromAppointment,
-                status: { notIn: ['cancelled', 'canceled'] },
-                OR: [
-                  {
-                    startTime: { lt: end },
-                    endTime: { gt: start },
-                  },
-                ],
-              },
-            });
-      
-
-      if (conflict) {
-        throw new BadRequestException(
-          'O médico já possui um agendamento neste horário.',
-        );
-      }
-
-      // 6. Criar agendamento
       return tx.appointment.create({
         data: {
-          ...createAppointmentDto,
+          tenantId,
           startTime: start,
           endTime: end,
-          tenantId,
+          staffId,
+          patientId,
+          procedureId,
+          status: 'scheduled',
         },
         include: {
-          patient: { select: { name: true } },
-          staff: { select: { name: true, specialty: true } },
+          patient: { select: { id: true, name: true } },
+          staff: { select: { id: true, name: true } },
           procedure: { select: { id: true, name: true, grossAmount: true } },
         },
       });
@@ -128,150 +83,124 @@ if (!staffProcedure) {
     date?: string,
     startDate?: string,
     endDate?: string,
+    userRole?: Role,
+    userStaffId?: string,
+    currentUserId?: string,
   ) {
-    const where: any = { tenantId };
-
-    if (doctorId) {
-      where.staffId = doctorId;
-    }
-
-    // Prioridade: date > (startDate + endDate)
-    if (date) {
-      // Garantir que a data seja interpretada como local (não UTC)
-      // Se date vem como "yyyy-MM-dd", criar data local corretamente
-      const [year, month, day] = date.split('-').map(Number);
-      const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
-      const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-      where.startTime = {
-        gte: startOfDay,
-        lte: endOfDay,
-      };
-    } else if (startDate || endDate) {
-      where.startTime = {};
-
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        where.startTime.gte = start;
-      }
-
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.startTime.lte = end;
-      }
-    }
+    const role = this.normalizeRole(userRole);
 
     return this.prisma.withTenant(tenantId, async (tx) => {
+      const where: any = { tenantId };
+
+      // RBAC definitivo:
+      // - doctor: força staffId do próprio médico (ignora doctorId)
+      // - demais: pode filtrar por doctorId
+      if (role === 'doctor') {
+        const staffId = await this.ensureDoctorStaffId(tx, tenantId, userStaffId, currentUserId);
+        where.staffId = staffId;
+      } else if (doctorId) {
+        where.staffId = doctorId;
+      }
+
+      if (date) {
+        const start = new Date(`${date}T00:00:00.000`);
+        const end = new Date(`${date}T23:59:59.999`);
+        where.startTime = { gte: start, lte: end };
+      } else if (startDate && endDate) {
+        const start = new Date(`${startDate}T00:00:00.000`);
+        const end = new Date(`${endDate}T23:59:59.999`);
+        where.startTime = { gte: start, lte: end };
+      }
+
       return tx.appointment.findMany({
         where,
+        orderBy: { startTime: 'asc' },
         include: {
-          patient: { select: { id: true, name: true, phone: true } },
-          staff: { select: { id: true, name: true, specialty: true } },
+          patient: { select: { id: true, name: true } },
+          staff: { select: { id: true, name: true } },
           procedure: { select: { id: true, name: true, grossAmount: true } },
         },
-        orderBy: { startTime: 'asc' },
       });
     });
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(
+    tenantId: string,
+    id: string,
+    userRole?: Role,
+    userStaffId?: string,
+    currentUserId?: string,
+  ) {
+    const role = this.normalizeRole(userRole);
+
     return this.prisma.withTenant(tenantId, async (tx) => {
-      return tx.appointment.findFirst({
+      const appt = await tx.appointment.findFirst({
         where: { id, tenantId },
         include: {
-          patient: true,
-          staff: true,
+          patient: { select: { id: true, name: true } },
+          staff: { select: { id: true, name: true } },
           procedure: { select: { id: true, name: true, grossAmount: true } },
         },
       });
+
+      if (!appt) throw new NotFoundException('Agendamento não encontrado.');
+
+      if (role === 'doctor') {
+        const staffId = await this.ensureDoctorStaffId(tx, tenantId, userStaffId, currentUserId);
+        if (appt.staffId !== staffId) {
+          throw new ForbiddenException('Acesso negado ao agendamento.');
+        }
+      }
+
+      return appt;
     });
   }
 
   async updateStatus(
     tenantId: string,
     id: string,
-    status: string,
-    userRole?: string,
+    dto: UpdateAppointmentStatusDto,
+    userRole: Role,
     userStaffId?: string,
+    currentUserId?: string,
   ) {
-    // Validar status permitidos
-    const allowedStatuses = [
-      'scheduled',
-      'confirmed',
-      'in_progress',
-      'completed',
-      'cancelled',
-      'canceled',
-    ];
-    const normalizedStatus = status.toLowerCase();
+    const role = this.normalizeRole(userRole);
+    const status = String(dto?.status ?? '').trim().toLowerCase();
 
-    if (!allowedStatuses.includes(normalizedStatus)) {
-      throw new BadRequestException(
-        `Status inválido. Valores permitidos: ${allowedStatuses.join(', ')}`,
-      );
-    }
+    if (!status) throw new BadRequestException('Status é obrigatório.');
 
-    // Buscar agendamento para validações
-    const appointment = await this.prisma.withTenant(tenantId, async (tx) => {
-      return tx.appointment.findFirst({
-        where: { id, tenantId },
-        select: { staffId: true, status: true },
-      });
-    });
-
-    if (!appointment) {
-      throw new NotFoundException('Agendamento não encontrado.');
-    }
-
-    // Validações específicas para RECEPTIONIST
-    if (userRole === 'receptionist' || userRole === 'RECEPTIONIST') {
-      // RECEPTIONIST NÃO pode iniciar atendimento (in_progress)
-      if (normalizedStatus === 'in_progress') {
-        throw new ForbiddenException(
-          'Apenas médicos podem iniciar atendimentos.',
-        );
-      }
-      // RECEPTIONIST também não pode finalizar (completed)
-      if (normalizedStatus === 'completed') {
-        throw new ForbiddenException(
-          'Apenas médicos podem finalizar atendimentos.',
-        );
-      }
-    }
-
-    // Validações específicas para DOCTOR
-    if (userRole === 'doctor' || userRole === 'DOCTOR') {
-      // DOCTOR precisa ter staffId vinculado
-      if (!userStaffId) {
-        throw new ForbiddenException(
-          'Usuário médico não possui vínculo com profissional. Entre em contato com o administrador.',
-        );
-      }
-
-      // DOCTOR só pode atualizar seus próprios agendamentos
-      if (appointment.staffId !== userStaffId) {
-        throw new ForbiddenException(
-          'Você só pode atualizar status dos seus próprios agendamentos.',
-        );
-      }
-
-      // DOCTOR só pode atualizar para in_progress ou completed
-      if (
-        normalizedStatus !== 'in_progress' &&
-        normalizedStatus !== 'completed'
-      ) {
-        throw new ForbiddenException(
-          'Médicos só podem iniciar (in_progress) ou finalizar (completed) atendimentos.',
-        );
-      }
+    // Mantém compatibilidade com seu DTO e com o sistema
+    const allowed = ['scheduled', 'confirmed', 'in_progress', 'completed', 'canceled'];
+    if (!allowed.includes(status)) {
+      throw new BadRequestException(`Status inválido. Permitidos: ${allowed.join(', ')}`);
     }
 
     return this.prisma.withTenant(tenantId, async (tx) => {
+      const appt = await tx.appointment.findFirst({
+        where: { id, tenantId },
+        select: { id: true, staffId: true, status: true },
+      });
+
+      if (!appt) throw new NotFoundException('Agendamento não encontrado.');
+
+      if (role === 'doctor') {
+        const staffId = await this.ensureDoctorStaffId(tx, tenantId, userStaffId, currentUserId);
+
+        if (appt.staffId !== staffId) {
+          throw new ForbiddenException('Você só pode alterar status dos seus próprios agendamentos.');
+        }
+
+        // Médico só pode operar pipeline clínico
+        if (!['in_progress', 'completed'].includes(status)) {
+          throw new ForbiddenException(
+            'Médico só pode iniciar (in_progress) ou finalizar (completed) atendimentos.',
+          );
+        }
+      }
+
       return tx.appointment.update({
         where: { id, tenantId },
-        data: { status: normalizedStatus },
+        data: { status },
         include: {
           patient: { select: { id: true, name: true } },
           staff: { select: { id: true, name: true } },
@@ -282,12 +211,9 @@ if (!staffProcedure) {
   }
 
   async remove(tenantId: string, id: string) {
-    // Em agendas médicas, geralmente não deletamos, apenas cancelamos.
-    // Mas para o MVP vamos permitir o delete físico se necessário.
     return this.prisma.withTenant(tenantId, async (tx) => {
-      return tx.appointment.delete({
-        where: { id, tenantId },
-      });
+      return tx.appointment.delete({ where: { id, tenantId } });
     });
   }
 }
+

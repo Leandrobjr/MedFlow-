@@ -29,10 +29,7 @@ function formatDateBR(date: Date | string, formatStr: string = 'dd/MM/yyyy'): st
   
   // Para timestamps do banco (ISO strings completas ou Date objects)
   const d = new Date(date);
-  // Ajustar para o fuso horário brasileiro (UTC-3)
-  // Subtrai 3 horas para converter de UTC para horário de Brasília
-  const brDate = new Date(d.getTime() - (3 * 60 * 60 * 1000));
-  return format(brDate, formatStr, { locale: ptBR });
+  return format(d, formatStr, { locale: ptBR });
 }
 
 const TRANSACTION_CATEGORIES = {
@@ -2762,19 +2759,19 @@ export default function FinanceiroPage() {
                     const grossAmount = fee.grossAmount ? parseFloat(String(fee.grossAmount)) : 0;
                     const feeValue = fee.feeAmount ? parseFloat(String(fee.feeAmount)) : 0;
                     const commissionRate = fee.commissionRate ? parseFloat(String(fee.commissionRate)) : 0;
-// Usar o horário da consulta (startTime) se disponível, senão usar fallback
-const appointmentStart =
-  (fee.appointment as any)?.startTime ??
-  (fee.appointment as any)?.startAt ??
-  (fee.appointment as any)?.start ??
-  (fee.transaction as any)?.createdAt ??
-  (fee as any)?.createdAt ??
-  (fee as any)?.paidAt ??
-  (fee as any)?.periodStart ??
-  (fee as any)?.periodEnd ??
-  new Date();
+                    // Usar o horário da consulta (startTime) se disponível, senão usar fallback
+                    const appointmentStart =
+                      (fee.appointment as any)?.startTime ??
+                      (fee.appointment as any)?.startAt ??
+                      (fee.appointment as any)?.start ??
+                      (fee.transaction as any)?.createdAt ??
+                      (fee as any)?.createdAt ??
+                      (fee as any)?.paidAt ??
+                      (fee as any)?.periodStart ??
+                      (fee as any)?.periodEnd ??
+                      new Date();
 
-const date = new Date(appointmentStart);
+                    const date = new Date(appointmentStart);
 
                     
                     return (
@@ -3061,7 +3058,8 @@ const date = new Date(appointmentStart);
                           });
                           
                           // O resultado deve conter o paymentId do repasse fechado
-                          const paymentId = result?.id || result?.paymentId || null;
+                          const paymentId = (result as any)?.paymentId ?? (result as any)?.id ?? null;
+
                           if (paymentId) {
                             setClosedPaymentId(paymentId);
                             toast.success('Repasse finalizado com sucesso! Agora você pode imprimir o recibo.');

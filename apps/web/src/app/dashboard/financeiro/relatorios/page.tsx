@@ -30,10 +30,7 @@ function formatDateBR(date: Date | string, formatStr: string = 'dd/MM/yyyy'): st
   
   // Para timestamps do banco (ISO strings completas ou Date objects)
   const d = new Date(date);
-  // Ajustar para o fuso horário brasileiro (UTC-3)
-  // Subtrai 3 horas para converter de UTC para horário de Brasília
-  const brDate = new Date(d.getTime() - (3 * 60 * 60 * 1000));
-  return format(brDate, formatStr, { locale: ptBR });
+  return format(d, formatStr, { locale: ptBR });
 }
 
 type ReportType = 'daily-closure' | 'billing' | 'medical-fee' | 'expenses' | 'closures';
@@ -98,9 +95,9 @@ export default function RelatoriosPage() {
           staffService.getAll('DOCTOR'),
           patientService.getAll(),
         ]);
-        setProcedures(proceduresData);
-        setDoctors(doctorsData);
-        setPatients(patientsData);
+        setProcedures(proceduresData || []);
+        setDoctors(doctorsData || []);
+        setPatients(patientsData || []);
       } else if (activeReport === 'expenses') {
         try {
           const categoriesData = await expenseCategoriesService.getAll(true);

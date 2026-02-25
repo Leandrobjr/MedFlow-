@@ -10,29 +10,50 @@ import { ptBR } from 'date-fns/locale';
 import { UserRole } from '../common/shared-types';
 
 /**
- * Formata uma data para o fuso horário brasileiro (UTC-3)
- * O banco armazena em UTC, então subtraímos 3 horas para exibir em horário de Brasília
+ * Converte uma data UTC "date-only" (meia-noite UTC) para uma Date local
+ * preservando o dia correto (evita que 24/02 UTC vire 23/02 em UTC-3).
+ */
+function utcDateToLocal(date: Date | string): Date {
+  const d = new Date(date);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
+}
+
+/**
+ * Formata uma data para exibição no formato brasileiro.
+ * Usa o fuso local do sistema para timestamps com horário.
  */
 function formatDateBR(date: Date | string, formatStr: string): string {
   const d = new Date(date);
-  // Ajustar para o fuso horário brasileiro (UTC-3)
-  // Subtrai 3 horas para converter de UTC para horário de Brasília
-  const brDate = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-  return format(brDate, formatStr, { locale: ptBR });
+  return format(d, formatStr, { locale: ptBR });
 }
 
 /**
- * Formata apenas a data (sem horário) para o fuso brasileiro
+ * Formata apenas a data (sem horário).
+ * Usa componentes UTC para evitar que meia-noite UTC vire o dia anterior em UTC-3.
  */
 function formatDateOnlyBR(date: Date | string): string {
-  return formatDateBR(date, 'dd/MM/yyyy');
+  return format(utcDateToLocal(date), 'dd/MM/yyyy', { locale: ptBR });
 }
 
 /**
- * Formata data e hora para o fuso brasileiro
+ * Formata data e hora para o fuso brasileiro (timestamps reais).
  */
 function formatDateTimeBR(date: Date | string): string {
   return formatDateBR(date, "dd/MM/yyyy 'às' HH:mm");
+}
+
+/**
+ * Calcula início e fim do dia LOCAL a partir de uma data UTC "date-only".
+ */
+function getDayRangeFromUtcDate(date: Date | string): { startOfDay: Date; endOfDay: Date } {
+  const d = new Date(date);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  const day = d.getUTCDate();
+  return {
+    startOfDay: new Date(Date.UTC(year, month, day, 3, 0, 0, 0)),
+    endOfDay: new Date(Date.UTC(year, month, day + 1, 2, 59, 59, 999)),
+  };
 }
 
 @Injectable()
@@ -60,11 +81,7 @@ export class ReportsService {
       throw new NotFoundException('Fechamento de caixa não encontrado.');
     }
 
-    // Buscar transações do dia
-    const startOfDay = new Date(closure.date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(closure.date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const { startOfDay, endOfDay } = getDayRangeFromUtcDate(closure.date);
 
     const transactions = await this.prisma.withTenant(tenantId, async (tx) => {
       return tx.transaction.findMany({
@@ -121,7 +138,7 @@ export class ReportsService {
     doc.moveDown(0.5);
     doc
       .fontSize(10)
-      .text(`Data: ${formatDateBR(closure.date, "dd 'de' MMMM 'de' yyyy")}`, {
+      .text(`Data: ${format(utcDateToLocal(closure.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`, {
         align: 'center',
       });
     doc.moveDown();
@@ -149,7 +166,6 @@ export class ReportsService {
     doc.moveDown(0.5);
     doc.fontSize(10);
 
-    // Definir ordem específica dos métodos
     const methodOrder = [
       'Dinheiro',
       'PIX',
@@ -157,11 +173,10 @@ export class ReportsService {
       'Cartão de Crédito',
     ];
 
-    // Listar cada método na ordem específica com entradas, saídas e saldo
     methodOrder.forEach((method) => {
       const methodData = byMethod[method] || { income: 0, expense: 0 };
       const methodBalance = methodData.income - methodData.expense;
-      doc.text(`${method}:`, { continued: false });
+      doc.text(`${method}:`);
       doc.text(
         `  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`,
         { indent: 20 },
@@ -170,20 +185,17 @@ export class ReportsService {
         `  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`,
         { indent: 20 },
       );
-      doc.fillColor(methodBalance >= 0 ? 'green' : 'red');
       doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, {
         indent: 20,
       });
-      doc.fillColor('black'); // Resetar para preto
       doc.moveDown(0.3);
     });
 
-    // Listar outros métodos que não estão na ordem padrão
     Object.keys(byMethod).forEach((method) => {
       if (!methodOrder.includes(method)) {
         const methodData = byMethod[method];
         const methodBalance = methodData.income - methodData.expense;
-        doc.text(`${method}:`, { continued: false });
+        doc.text(`${method}:`);
         doc.text(
           `  Entradas: R$ ${methodData.income.toFixed(2).replace('.', ',')}`,
           { indent: 20 },
@@ -192,31 +204,11 @@ export class ReportsService {
           `  Saídas: R$ ${methodData.expense.toFixed(2).replace('.', ',')}`,
           { indent: 20 },
         );
-        doc.fillColor(methodBalance >= 0 ? 'green' : 'red');
         doc.text(`  Saldo: R$ ${methodBalance.toFixed(2).replace('.', ',')}`, {
           indent: 20,
         });
-        doc.fillColor('black'); // Resetar para preto
         doc.moveDown(0.3);
       }
-    });
-
-    doc.moveDown();
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-    Object.entries(byMethod).forEach(([method, values]) => {
-      doc.text(`${method}:`);
-      doc.text(`  Entradas: R$ ${values.income.toFixed(2).replace('.', ',')}`, {
-        indent: 20,
-      });
-      doc.text(`  Saídas: R$ ${values.expense.toFixed(2).replace('.', ',')}`, {
-        indent: 20,
-      });
-      doc.text(
-        `  Saldo: R$ ${(values.income - values.expense).toFixed(2).replace('.', ',')}`,
-        { indent: 20 },
-      );
-      doc.moveDown(0.3);
     });
     doc.moveDown();
 
@@ -326,10 +318,10 @@ export class ReportsService {
     staffId?: string,
     patientId?: string,
   ): Promise<Buffer> {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    const { startOfDay: start, endOfDay: end } = {
+      startOfDay: getDayRangeFromUtcDate(startDate).startOfDay,
+      endOfDay: getDayRangeFromUtcDate(endDate).endOfDay,
+    };
 
     const where: any = {
       tenantId,
@@ -678,10 +670,10 @@ export class ReportsService {
     startDate: string,
     endDate: string,
   ): Promise<Buffer> {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    const { startOfDay: start, endOfDay: end } = {
+      startOfDay: getDayRangeFromUtcDate(startDate).startOfDay,
+      endOfDay: getDayRangeFromUtcDate(endDate).endOfDay,
+    };
 
     // Buscar repasses pendentes
     const fees = await this.prisma.withTenant(tenantId, async (tx) => {
@@ -835,10 +827,10 @@ export class ReportsService {
     endDate: string,
     userId?: string,
   ): Promise<Buffer> {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    const { startOfDay: start, endOfDay: end } = {
+      startOfDay: getDayRangeFromUtcDate(startDate).startOfDay,
+      endOfDay: getDayRangeFromUtcDate(endDate).endOfDay,
+    };
 
     const where: any = {
       tenantId,
@@ -1035,10 +1027,10 @@ export class ReportsService {
     endDate: string,
     categoryId?: string,
   ): Promise<Buffer> {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    const { startOfDay: start, endOfDay: end } = {
+      startOfDay: getDayRangeFromUtcDate(startDate).startOfDay,
+      endOfDay: getDayRangeFromUtcDate(endDate).endOfDay,
+    };
 
     const where: any = {
       tenantId,

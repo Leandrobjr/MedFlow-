@@ -175,18 +175,19 @@ export default function PEPPage() {
       try {
         console.log('[PEP] Carregando dados do paciente:', selectedPatient.id);
         const updatedPatient = await patientService.getById(selectedPatient.id);
-        console.log('[PEP] Dados do paciente carregados:', {
-          id: updatedPatient?.id,
-          name: updatedPatient?.name,
-          allergies: updatedPatient?.allergies,
-          medications: updatedPatient?.medications,
-        });
-        setSelectedPatient(updatedPatient);
-        // Guardar valores originais para comparação no onBlur
-        setOriginalPatientData({
-          allergies: updatedPatient.allergies || '',
-          medications: updatedPatient.medications || '',
-        });
+        if (updatedPatient) {
+          console.log('[PEP] Dados do paciente carregados:', {
+            id: updatedPatient.id,
+            name: updatedPatient.name,
+            allergies: updatedPatient.allergies,
+            medications: updatedPatient.medications,
+          });
+          setSelectedPatient(updatedPatient);
+          setOriginalPatientData({
+            allergies: updatedPatient.allergies || '',
+            medications: updatedPatient.medications || '',
+          });
+        }
       } catch (error) {
         console.error('Erro ao carregar dados atualizados do paciente:', error);
       }
@@ -348,13 +349,14 @@ export default function PEPPage() {
       // Atualizar lista de prontuários
       await fetchRecords(selectedPatient.id);
       
-      // Recarregar dados atualizados do paciente para garantir que alergias e medicamentos estão atualizados
       const updatedPatient = await patientService.getById(selectedPatient.id);
-      setSelectedPatient(updatedPatient);
-      setOriginalPatientData({
-        allergies: updatedPatient.allergies || '',
-        medications: updatedPatient.medications || '',
-      });
+      if (updatedPatient) {
+        setSelectedPatient(updatedPatient);
+        setOriginalPatientData({
+          allergies: updatedPatient.allergies || '',
+          medications: updatedPatient.medications || '',
+        });
+      }
       
       // Abrir o prontuário no editor (campos do prontuário ficam em branco, mas dados do paciente aparecem)
       handleOpenRecord(newRecord);
@@ -481,14 +483,15 @@ export default function PEPPage() {
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <p className="text-sm font-bold text-blue-600">{format(new Date(record.createdAt), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
-                        <p className="text-xs text-gray-500">Médico: Dr(a). {record.doctor.name}</p>
+                        <p className="text-xs text-gray-500">Médico: Dr(a). {record.doctor?.name ?? 'Não informado'}
+                        </p>
                       </div>
                       <div className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${record.isFinalized ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                         {record.isFinalized ? 'Finalizado' : 'Em Aberto'}
                       </div>
                     </div>
                     <p className="text-sm text-gray-700 line-clamp-2">
-                      <span className="font-bold">Diagnóstico:</span> {record.diagnosis || 'Não informado'}
+                      <span className="font-bold">Diagnóstico:</span> {record.soapAssessment || record.diagnosis || 'Não informado'}
                     </p>
                     <div className="mt-4 flex justify-end">
                       <span className="text-xs text-blue-600 font-semibold group-hover:underline">Visualizar detalhes →</span>
@@ -799,7 +802,7 @@ export default function PEPPage() {
               </h3>
             </div>
             <div className="p-6 space-y-4">
-              {selectedRecord.addendums.map(add => (
+              {(selectedRecord.addendums ?? []).map((add) => (
                 <div key={add.id} className="bg-yellow-50 p-4 rounded-xl border-l-4 border-yellow-400">
                   <p className="text-xs font-bold text-yellow-700 mb-1">
                     Adicionado em {format(new Date(add.createdAt), "dd/MM/yyyy HH:mm")}
