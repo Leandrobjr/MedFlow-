@@ -1267,10 +1267,7 @@ export default function FinanceiroPage() {
                         )
                       )}
                       {(getUserRole() === 'ADMIN' || getUserRole() === 'OWNER') && (() => {
-                        // Verificar se o caixa ADMIN está fechado (apenas quando não há usuário selecionado)
-                        // Se há usuário selecionado, não mostrar botão de fechar caixa admin
-                        if (selectedBoxUserId) {
-                          // Se há usuário selecionado, não mostrar botão de fechar caixa admin
+                        if (selectedBoxUserId && selectedClosureType !== 'ADMIN') {
                           return null;
                         }
                         
