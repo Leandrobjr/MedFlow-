@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "verify tenant isolation on all endpoints",
+    "description": "Test that all API endpoints enforce tenant isolation by requiring tenant context via x-tenant-slug header or token tenantId, and prevent cross-tenant data access with appropriate 403 Forbidden or empty results."
+  },
+  {
+    "id": "TC002",
+    "title": "test jwt cookie authentication flow",
+    "description": "Verify the full JWT cookie authentication flow including login with valid credentials setting HttpOnly access and refresh tokens, refresh token rotation, access to /auth/me with valid cookies, and logout clearing cookies."
+  },
+  {
+    "id": "TC003",
+    "title": "test appointments scheduling and status updates",
+    "description": "Validate creating, reading, updating, and deleting appointments with tenant isolation, including status updates and conflict detection for overlapping appointment times."
+  },
+  {
+    "id": "TC004",
+    "title": "test patients crud operations",
+    "description": "Test creating, reading, updating, and error handling for patient records with tenant scoping and validation of required fields."
+  },
+  {
+    "id": "TC005",
+    "title": "test staff and procedures management",
+    "description": "Verify staff CRUD operations, procedure creation, and linking procedures to staff with role-based access control and error handling for non-existent procedures."
+  },
+  {
+    "id": "TC006",
+    "title": "test pep medical records management",
+    "description": "Test creating, finalizing, and adding addendums to PEP medical records with tenant isolation and validation of required sign-off fields."
+  },
+  {
+    "id": "TC007",
+    "title": "test finance transactions and closures",
+    "description": "Validate creating financial transactions, retrieving box status, closing cashier boxes, closing medical fee payments with validation, and tenant-scoped access."
+  },
+  {
+    "id": "TC008",
+    "title": "test pdf report generation and access control",
+    "description": "Test generating PDF reports for daily closures and medical fee repasses, ensuring tenant isolation and access control to prevent cross-tenant report access."
+  },
+  {
+    "id": "TC009",
+    "title": "test schedule configuration and blocks management",
+    "description": "Verify creating and retrieving schedule blocks with tenant isolation, validation to prevent overlapping blocks, and authentication enforcement."
+  },
+  {
+    "id": "TC010",
+    "title": "test suppliers and expense categories crud",
+    "description": "Test CRUD operations for suppliers and hierarchical expense categories with validation to prevent cycles and tenant scoping."
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "loginUser": "admin@medflow.local",
+  "loginPassword": "admin123",
+  "executionArgs": {
+    "projectName": "repo",
+    "projectPath": "D:\\Marco\\PROJETOS_IA\\MedFlow\\medflow-repo\\repo",
+    "testIds": [],
+    "additionalInstruction": "Foque em falhas críticas e de segurança (OWASP), autenticação por cookies, autorização por role e tenant, e fluxos de caixa/fechamento/relatórios. Se algum teste exigir dados que não existam, reporte como dependência (seed).",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-J2-00jwPENAZVrMsOGD-crf-rEZe5-OuXIx2xzg8cIjOHIWZkiW3tOj_QWD1CgTSWNl_RlY571YFDgmDLUDZ9CrvH5EKuhDkZvTifkMgs3uK6yeKJGG83jEqOM8TJe-Rxd4"
+    }
+  },
+  "serverPort": 61950,
+  "proxy": "http://5e967535-3890-4c22-add3-7313235c3c2a:Ow1YEeuCb5i2HIPNYU1LZLRURQmT6Lff@tun.testsprite.com:8080"
+}

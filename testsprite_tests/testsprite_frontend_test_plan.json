@@ -1,0 +1,1664 @@
+[
+  {
+    "id": "TC001",
+    "title": "Create an appointment from Agenda day view and see it on the calendar",
+    "description": "Verifies a user can create a new appointment for a selected professional and see the appointment card displayed in the day view calendar.",
+    "category": "Appointments (Agenda)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/agenda\""
+      },
+      {
+        "type": "action",
+        "description": "Select a professional from the professional filter"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Dia\" (Day) view toggle"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo agendamento\"/\"New Appointment\" button"
+      },
+      {
+        "type": "action",
+        "description": "Select a patient in the patient field"
+      },
+      {
+        "type": "action",
+        "description": "Select a procedure in the procedure field"
+      },
+      {
+        "type": "action",
+        "description": "Select a time in the time field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an appointment card is visible in the calendar for the selected time"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Prevent creating an appointment when selected time is blocked as Ocupado (external calendar conflict)",
+    "description": "Verifies the system blocks appointment creation when the chosen time conflicts with an externally synced \"Ocupado\" block and shows a visible conflict alert.",
+    "category": "Appointments (Agenda)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/agenda\""
+      },
+      {
+        "type": "action",
+        "description": "Select a professional from the professional filter"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo agendamento\"/\"New Appointment\" button"
+      },
+      {
+        "type": "action",
+        "description": "Select a patient in the patient field"
+      },
+      {
+        "type": "action",
+        "description": "Select a procedure in the procedure field"
+      },
+      {
+        "type": "action",
+        "description": "Select a time that is visibly blocked as \"Ocupado\" in the calendar"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Conflito\" is visible (conflict alert preventing creation)"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancelar\"/\"Cancel\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new appointment form/modal is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Filter Agenda by professional and verify calendar updates to selected professional",
+    "description": "Verifies selecting a different professional in the filter updates the calendar view to reflect that professional’s schedule.",
+    "category": "Appointments (Agenda)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/agenda\""
+      },
+      {
+        "type": "action",
+        "description": "Select a professional from the professional filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected professional name is visible in the filter control"
+      },
+      {
+        "type": "action",
+        "description": "Select a different professional from the professional filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the newly selected professional name is visible in the filter control"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Switch Agenda to day view and verify day view UI is shown",
+    "description": "Verifies the user can switch the calendar to Day view and sees Day view indicators.",
+    "category": "Appointments (Agenda)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/agenda\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Dia\" (Day) view toggle"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Dia\" is visible as the active calendar view"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Save weekly schedule configuration for a selected professional",
+    "description": "Verifies a user can select a staff profile, adjust weekly availability, save, and see a success confirmation.",
+    "category": "Schedule Config & Blocks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Configuração\" (schedule configuration) in the Agenda area"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a staff/professional profile from the staff selector"
+      },
+      {
+        "type": "action",
+        "description": "Enable a day of the week and set an available period for that day"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button to save the schedule configuration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"success\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Save schedule configuration with a day disabled",
+    "description": "Verifies a user can disable a weekday in the weekly schedule and save successfully.",
+    "category": "Schedule Config & Blocks",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Configuração\" (schedule configuration) in the Agenda area"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a staff/professional profile from the staff selector"
+      },
+      {
+        "type": "action",
+        "description": "Disable a day of the week in the weekly availability"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button to save the schedule configuration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"success\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Add a new schedule block (vacation/holiday/period) and confirm it appears in the list",
+    "description": "Verifies a user can create a new block with start/end dates and see it listed after saving.",
+    "category": "Schedule Config & Blocks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Configuração\" (schedule configuration) in the Agenda area"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a staff/professional profile from the staff selector"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Block\" button"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Vacation\" from the block type dropdown (or any available block type option)"
+      },
+      {
+        "type": "action",
+        "description": "Fill a start date for the block in the start date field"
+      },
+      {
+        "type": "action",
+        "description": "Fill an end date for the block in the end date field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button to create the block"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the blocks list/table is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Prevent saving a block when end date is before start date",
+    "description": "Verifies the UI shows a validation error when the block end date is earlier than the start date.",
+    "category": "Schedule Config & Blocks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Agenda\" in the main navigation/menu"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Configuração\" (schedule configuration) in the Agenda area"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a staff/professional profile from the staff selector"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Block\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill a start date that is later than the end date in the start date field"
+      },
+      {
+        "type": "action",
+        "description": "Fill an end date that is earlier than the start date in the end date field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button to create the block"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"end\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Create a new patient successfully (with CPF and contact)",
+    "description": "Verifies a user can create a patient and see it appear in the patients list.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pacientes\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Paciente\"/\"New Patient\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Paciente Teste\" into the patient name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"123.456.789-09\" into the CPF field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"(11) 90000-0001\" into the phone/WhatsApp field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Paciente Teste\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Validate required fields when creating a new patient",
+    "description": "Verifies required-field validation appears when attempting to save an incomplete patient form.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Pacientes\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Paciente\"/\"New Patient\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"obrigatório\" or \"campo obrigatório\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Create a new staff member with role and procedure linkage",
+    "description": "Verifies a user can add a staff member, assign role(s) and link procedures, then see the staff member in the team list.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Equipe\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Adicionar\"/\"Add Staff\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Profissional Teste\" into the staff name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"profissional.teste@exemplo.com\" into the staff email field"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Profissional\" (or equivalent) from the role dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select at least one procedure in the procedures linkage section"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Profissional Teste\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Validate commission/role requirements when adding staff",
+    "description": "Verifies the staff form blocks saving and shows validation when required role/commission fields are missing.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Equipe\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Adicionar\"/\"Add Staff\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Profissional Sem Regras\" into the staff name field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"obrigatório\" or \"campo obrigatório\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Create a new procedure successfully (name and pricing)",
+    "description": "Verifies a user can create a procedure with pricing and see it in the procedures list.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Procedimentos\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Procedimento\"/\"New Procedure\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Consulta Teste\" into the procedure name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"150\" into the price/value field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Consulta Teste\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Prevent creating a procedure with invalid pricing",
+    "description": "Verifies pricing validation appears when a non-numeric or zero/negative value is used.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Procedimentos\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Procedimento\"/\"New Procedure\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Procedimento Preço Inválido\" into the procedure name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"-10\" into the price/value field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"valor\" or \"preço\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"inválido\" or \"deve ser\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Create a new supplier successfully",
+    "description": "Verifies a user can create a supplier and see it in the suppliers list.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Fornecedores\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Fornecedor\"/\"New Supplier\" button"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Fornecedor Teste\" into the supplier name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"fornecedor.teste@exemplo.com\" into the supplier email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"(11) 91111-1111\" into the supplier phone field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Fornecedor Teste\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Validate required fields when creating a supplier",
+    "description": "Verifies the supplier form shows validation and blocks saving when required fields are missing.",
+    "category": "Cadastros: Patients, Staff, Procedures, Suppliers",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Entrar\"/\"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Fornecedores\" in the dashboard menu"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Novo Fornecedor\"/\"New Supplier\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Salvar\"/\"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"obrigatório\" or \"campo obrigatório\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Finalize a new SOAP record linked to an appointment",
+    "description": "Verifies a user can create a new PEP record for a patient, link it to an appointment, fill SOAP fields, and finalize it.",
+    "category": "Electronic Medical Record (PEP)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"PEP\" in the main navigation menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/pep"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a patient from the patient list"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Complete SOAP fields and finalize record (continuation from created record screen)",
+    "description": "Verifies the SOAP form accepts input for Subjetivo, Objetivo, Avaliação, and Plano, and that finalization marks the record as finalized.",
+    "category": "Electronic Medical Record (PEP)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"PEP\" in the main navigation menu"
+      },
+      {
+        "type": "action",
+        "description": "Click \"New Record\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Link appointment\""
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "View patient medical record history in chronological order",
+    "description": "Verifies selecting a patient shows a chronological list of records and addendums in the history view.",
+    "category": "Electronic Medical Record (PEP)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"PEP\" in the main navigation menu"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a patient from the patient list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"History\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Medical record list\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Validate required SOAP fields before finalization",
+    "description": "Verifies the record cannot be finalized when required SOAP fields are missing and an error message is shown.",
+    "category": "Electronic Medical Record (PEP)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"PEP\" in the main navigation menu"
+      },
+      {
+        "type": "action",
+        "description": "Click \"New Record\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Finalize the record\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Link appointment to a new record shows linked appointment in the record",
+    "description": "Verifies linking an appointment to a new record results in a visible indication of the linked appointment on the record screen.",
+    "category": "Electronic Medical Record (PEP)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"PEP\" in the main navigation menu"
+      },
+      {
+        "type": "action",
+        "description": "Click to select a patient from the patient list"
+      },
+      {
+        "type": "action",
+        "description": "Click \"New Record\""
+      },
+      {
+        "type": "action",
+        "description": "Click \"Link appointment\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Appointment linked\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Create an income transaction and verify it appears in the transactions list",
+    "description": "Verifies a user can add an income transaction and see it listed in Finance transactions.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Transaction\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"New Transaction\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Income\" from the transaction type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"E2E Test Income\" into the description field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"100\" into the amount/value field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E2E Test Income\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"100\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Create an expense transaction and verify it appears in the transactions list",
+    "description": "Verifies a user can add an expense transaction and see it listed in Finance transactions.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Transaction\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"New Transaction\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Expense\" from the transaction type dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Type \"E2E Test Expense\" into the description field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"25\" into the amount/value field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E2E Test Expense\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"25\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Validate required fields when saving a transaction with empty form",
+    "description": "Verifies validation errors appear and saving is prevented when required transaction fields are missing.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Transaction\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"New Transaction\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Required\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Amount\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Description\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Close receptionist cash box for a selected day and verify closure status is shown",
+    "description": "Verifies a user can select a day, close the receptionist cash box, and see a resulting closure record/status.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the day/date selector control"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Date picker\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on an available day/date in the date picker"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close receptionist cash box\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Confirm\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Closed\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Attempt to close receptionist cash box twice for the same day and verify a warning or blocked action",
+    "description": "Verifies the UI prevents closing an already closed receptionist cash box for the selected day.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the day/date selector control"
+      },
+      {
+        "type": "action",
+        "description": "Click on an available day/date in the date picker"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close receptionist cash box\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Confirm\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Closed\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close receptionist cash box\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Already closed\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Close medical fee payments and verify repasse report option is available",
+    "description": "Verifies a user can close medical fee payments and is presented with an option to download the repasse report.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Medical Fees\" tab/button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Medical Fees\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close medical fee payments\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Closed\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Download repasse report\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Download repasse report after closing medical fee payments (UI verification only)",
+    "description": "Verifies the UI triggers the repasse report download action after closing medical fee payments (without validating file download).",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Financeiro\" in the main navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Medical Fees\" tab/button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Download repasse report\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Download repasse report\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Generating\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Add an expense category (no parent) and verify it appears in the categories tree",
+    "description": "Verifies a user can add a top-level expense category and see it in the hierarchical tree.",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Categorias\" within the Finance section navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro/categorias\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Category\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"New Category\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"E2E Category Root\" into the category name field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"E2E Category Root\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Generate a Finance report from Reports page and verify report section renders",
+    "description": "Verifies the user can open the reports page and initiate a report generation from available report options (UI confirmation only).",
+    "category": "Finance (Transactions, Closures, Medical Fees) & Reports",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Relatórios\" within the Finance section navigation/menu"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard/financeiro/relatorios\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Reports\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Billing\" report option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Billing\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Generate\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Generating\" is visible"
+      }
+    ]
+  }
+]

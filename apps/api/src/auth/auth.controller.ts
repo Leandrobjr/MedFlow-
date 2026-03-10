@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Post,
   Req,
   Res,
@@ -41,6 +43,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -77,11 +80,13 @@ export class AuthController {
     res.cookie('refresh_token', refreshToken, this.getCookieOptions(7 * 24 * 60 * 60 * 1000));
 
     return {
+      tenantId: safeUser.tenantId,
       user: {
         id: safeUser.id,
         email: safeUser.email,
         name: safeUser.name,
         role: safeUser.role,
+        tenantId: safeUser.tenantId,
         staffId: safeUser.staffId ?? null,
       },
     };
@@ -89,6 +94,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  @HttpCode(HttpStatus.OK)
   async refresh(
     @Body() dto: Partial<RefreshDto>,
     @Req() req: Request,
@@ -155,11 +161,13 @@ export class AuthController {
     res.cookie('refresh_token', refreshToken, this.getCookieOptions(7 * 24 * 60 * 60 * 1000));
 
     return {
+      tenantId: safeUser.tenantId,
       user: {
         id: safeUser.id,
         email: safeUser.email,
         name: safeUser.name,
         role: safeUser.role,
+        tenantId: safeUser.tenantId,
         staffId: safeUser.staffId ?? null,
       },
     };
@@ -173,9 +181,18 @@ export class AuthController {
 
   @Post('logout')
   @Public()
+  @HttpCode(HttpStatus.OK)
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/' });
+    // Para browsers, clearCookie precisa "bater" com atributos relevantes do cookie
+    const isProd = process.env.NODE_ENV === 'production';
+    const clearOpts = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+    res.clearCookie('access_token', clearOpts);
+    res.clearCookie('refresh_token', clearOpts);
     return { ok: true };
   }
 }

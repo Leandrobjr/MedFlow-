@@ -1,0 +1,686 @@
+# **PRD: MediFlow \- Sistema Integrado de Gestão para Clínicas Médicas (SaaS)**
+
+## **1\. Executive Summary**
+
+**Produto:** MediFlow Integrated Management System
+
+**Versão:** 1.0.0
+
+**Data:** 11 de Dezembro de 2025
+
+**Product Manager:** Consultoria Sênior de Tecnologia em Saúde
+
+**Status:** Em Definição / Planejamento Estratégico
+
+### **Visão Geral**
+
+O MediFlow é projetado como uma plataforma SaaS (Software as a Service) *multi-tenant*, nativa em nuvem, destinada a revolucionar a gestão operacional, clínica e financeira de clínicas médicas de pequeno e médio porte no Brasil. O produto aborda a fragmentação crítica das ferramentas de saúde atuais, unificando agendamento inteligente, Prontuário Eletrônico do Paciente (PEP), gestão financeira com *split* de pagamentos automático e engajamento de pacientes via WhatsApp em um ecossistema único e compatível com as regulações vigentes.
+
+A proposta de valor central do MediFlow reside na eliminação do "trabalho invisível" que drena a rentabilidade das clínicas: a conciliação manual de agendas, a correção de glosas médicas por erros de preenchimento e o cálculo complexo de repasses financeiros aos profissionais de saúde. Ao automatizar esses fluxos, o MediFlow não apenas aumenta a eficiência operacional, mas também garante a segurança jurídica e a conformidade com a LGPD e as normas do CFM/SBIS.
+
+### **Objetivos Principais**
+
+1. **Objetivo de Negócio:** Capturar 5% do mercado de clínicas de pequeno e médio porte no Brasil (focando em especialidades com alto volume de consultas e procedimentos ambulatoriais) nos primeiros 18 meses. A meta financeira é atingir o *break-even* operacional no mês 14, impulsionado por um modelo de monetização híbrido (assinatura SaaS \+ taxa sobre transações financeiras processadas).  
+2. **Objetivo do Usuário:** Empoderar gestores e profissionais de saúde para focar no atendimento ao paciente, reduzindo a carga administrativa em 40%. Isso será alcançado através da automação de confirmações de consulta (reduzindo o *no-show*), validação preventiva de guias  (reduzindo glosas) e transparência financeira imediata.  
+3. **Objetivo Técnico:** Construir uma arquitetura escalável, segura e de alta disponibilidade (SLA 99.95%), capaz de suportar o isolamento rigoroso de dados entre *tenants* (clínicas) e garantir tempos de resposta de API inferiores a 200ms para operações críticas, como o carregamento do histórico clínico durante uma consulta.
+
+### **Métricas de Sucesso (KPIs)**
+
+A eficácia do lançamento e a performance contínua do MediFlow serão mensuradas através dos seguintes indicadores chave de desempenho:
+
+| Métrica | Valor Atual (Benchmark de Mercado) | Meta MediFlow (Ano 1\) | Data de Aferição |
+| :---- | :---- | :---- | :---- |
+| **Custo de Aquisição de Cliente (CAC)** | R$ 1.500,00 \- R$ 2.500,00 | \< R$ 800,00 (via PLG e Marketing de Conteúdo) | Trimestral |
+| **Taxa de Rejeição de Guias (Glosas)** | 15% \- 20% | \< 2% (devido ao validador prévio ) | Mensal |
+| **Tempo de Fechamento Financeiro (Repasse)** | 3 a 5 dias úteis/mês | \< 1 hora (automático via API de Split) | Mensal |
+| **Redução de No-Show (Faltas)** | 20% \- 30% | \< 10% (via confirmação WhatsApp) | Semanal |
+| **Adoção de Prescrição Digital** | 30% das consultas | \> 85% das consultas gerando receitas digitais | Mensal |
+
+### **Cronograma Macro**
+
+* **Kickoff:** 15 de Janeiro de 2026 – Início oficial do projeto, contratação da equipe *core* e configuração do ambiente de desenvolvimento.  
+* **MVP (Alpha):** 30 de Abril de 2026 – Lançamento para clínicas parceiras ("Beta Testers") focando no PEP essencial, Agenda Básica e Cadastro de Pacientes.  
+* **Beta Release:** 30 de Julho de 2026 – Integração completa com Google Calendar, Módulo  (Consulta) e Integração Memed.  
+* **Launch (V1.0):** 15 de Outubro de 2026 – Módulo Financeiro completo com Split de Pagamentos e Bot de WhatsApp V1 para confirmações.  
+* **Post-Launch Review:** 15 de Janeiro de 2027 – Análise de churn, feedback de usuários e priorização do roadmap para 2027\.
+
+## ---
+
+**2\. Product Overview**
+
+### **Problema**
+
+O mercado de gestão de clínicas médicas no Brasil enfrenta uma "tríade de ineficiência" estrutural que compromete tanto a qualidade do atendimento quanto a saúde financeira dos estabelecimentos:
+
+1. **Fragmentação Operacional Extrema:** A maioria das clínicas opera com um conjunto desconexo de ferramentas. O agendamento é feito no Google Calendar ou em agendas de papel; o prontuário é físico ou mantido em arquivos Word não seguros; o faturamento é gerido em softwares legados complexos ou portais de operadoras; e o financeiro é controlado em planilhas Excel vulneráveis a erros. Essa desconexão gera redundância de dados (o paciente precisa fornecer os mesmos dados múltiplas vezes) e conflitos de agenda constantes.1  
+2. **Complexidade do Faturamento e Perda de Receita (Glosas):** O padrão  (Troca de Informação em Saúde Suplementar), exigido pela ANS, possui regras de validação complexas e frequentemente atualizadas. O preenchimento manual ou em sistemas desatualizados resulta em altas taxas de glosas (recusa de pagamento por parte dos convênios), que podem comprometer até 20% do faturamento de uma clínica devido a erros burocráticos simples, como um código CBO incompatível com o procedimento.3  
+3. **Opacidade Financeira e Conflitos de Repasse:** O modelo de remuneração médica no Brasil envolve, frequentemente, o repasse de uma porcentagem do valor do procedimento ao profissional. Calcular esses valores manualmente ao final do mês, considerando descontos de taxas de cartão, impostos e regras variáveis por convênio, é uma tarefa hercúlea e propensa a erros, gerando desconfiança e atrito entre a administração da clínica e o corpo clínico.5
+
+### **Contexto Atual**
+
+Atualmente, o cenário de tecnologia para saúde (HealthTech) no Brasil está em plena transformação, impulsionada pela regulamentação da Telemedicina e pela exigência de digitalização dos processos. No entanto, muitas soluções disponíveis ainda são adaptações de sistemas desktop antigos para a web, sofrendo com usabilidade pobre (UX/UI deficiente) e falta de interoperabilidade real.
+
+Além disso, a Lei Geral de Proteção de Dados (LGPD) impôs requisitos rigorosos sobre o tratamento de dados sensíveis de saúde, tornando o uso de ferramentas informais (como WhatsApp pessoal para envio de exames) um risco jurídico significativo para as clínicas.6 Há uma demanda reprimida por soluções que sejam "compliance-by-design", mas que mantenham a agilidade e a facilidade de uso de softwares de consumo modernos.
+
+### **Solução Proposta**
+
+O MediFlow propõe uma plataforma unificada onde a **integração** é o recurso principal, não um "add-on". A solução se baseia em quatro pilares interconectados:
+
+1. **Agendamento Sincronizado e Inteligente:** Uma agenda proprietária que se integra via API bidirecional com o Google Calendar dos médicos. Isso resolve o problema da disponibilidade real, bloqueando horários na clínica quando o médico tem compromissos pessoais, e vice-versa, sem expor os detalhes dos eventos privados.8  
+2. **Prontuário Eletrônico (PEP) Seguro e Legal:** Um módulo de PEP desenhado sob a metodologia SOAP, com suporte nativo para assinatura digital (ICP-Brasil) e integração com a base de medicamentos da Memed. Isso garante que a prescrição gerada seja válida em qualquer farmácia e que o documento clínico tenha validade jurídica, eliminando a necessidade de papel.10  
+3. **Faturamento  Automatizado:** Um motor de geração e validação de XML  que verifica as regras da ANS (versão 4.01.00 ou superior) em tempo real, alertando sobre erros antes do envio do lote. Isso ataca diretamente a causa raiz das glosas administrativas.12  
+4. **Gestão Financeira com Split Automático:** Integração com gateways de pagamento (como Asaas ou Stripe) para processar recebimentos e executar a divisão de valores (Split de Pagamentos) no momento da transação. Isso garante que a parte do médico e a parte da clínica sejam separadas na origem, automatizando o repasse e a conciliação bancária.13
+
+### **Público-Alvo e Personas**
+
+A compreensão profunda dos usuários é vital para o sucesso do MediFlow. Identificamos duas personas primárias cujas necessidades moldarão as funcionalidades.
+
+#### **Persona Primária: Dr. Lucas (Dono da Clínica / Gestor)**
+
+* Foca na saúde financeira, gestão de repasses aos médicos parceiros e retenção de pacientes (CRM).  
+* **Necessidades:** Precisa saber se a clínica está lucrando, quer reduzir a taxa de faltas dos pacientes e exige garantia de que os dados médicos estão seguros para evitar processos.  
+* **Frustrações:** lidar com a rotatividade de secretárias.
+
+#### **Persona Secundária: Mariana (Secretária / Administradora)**
+
+* **Perfil:** multitarefa, responsável pela recepção, agendamento de consultas, retornos e exames(foco em vendas para aumentar ticket médio), cobrança (frente de caixa), fechamento do seu caixa diário;  
+* **Comportamento:** Trabalha com múltiplas abas abertas no navegador, telefone e WhatsApp simultaneamente. É a "power user" do sistema.  
+* **Necessidades:** Um sistema rápido que não trave; facilidade para encontrar horários vagos; automação nas confirmações de consulta para não ter que ligar para 30 pacientes por dia.  
+* **Frustrações:** Pacientes que reclamam de demora no atendimento; sistemas complexos onde é difícil achar o cadastro do paciente; ter que redigitar dados da agenda para o sistema de faturamento.
+
+**Médico/Profissional de Saúde:** 
+
+* Foca na excelência do atendimento, rapidez no preenchimento do prontuário e facilidade na prescrição.
+
+**Médico/Profissional de Saúde:** 
+
+Busca facilidade para agendar (agendamento online) e acesso rápido a receitas e pedidos de exames além de custo-beneficio.
+
+### **Análise Competitiva**
+
+O mercado brasileiro possui *players* estabelecidos, mas há espaço para inovação focada em integração financeira e experiência do usuário.
+
+| Competidor | Pontos Fortes | Pontos Fracos | Diferencial MediFlow |
+| :---- | :---- | :---- | :---- |
+| **iClinic** | Marca forte, excelente usabilidade para o médico, marketing integrado.15 | Funcionalidades financeiras básicas, gestão de repasse manual ou simplista, custo elevado para pequenas clínicas. | Automação financeira profunda com Split de Pagamentos na transação e validador  proativo. |
+| **Feegow** | Robustez em funcionalidades, atende clínicas grandes, forte no .1 | Interface complexa e datada, curva de aprendizado íngreme, implementação demorada. | UX moderna e intuitiva ("Zero Training"), arquitetura API-first para integrações rápidas. |
+| **Doctoralia** | Domínio na aquisição de pacientes (marketplace), agenda online forte.16 | Foco é marketing, não gestão clínica profunda; o PEP e o financeiro são secundários. | Foco na *gestão e retenção*, com PEP e Financeiro como core, integrando-se ao Doctoralia se necessário, não competindo no marketplace. |
+| **Simples Dental (Analógico)** | Referência em UX e gestão financeira para dentistas. | Focado exclusivamente em odontologia, não atende as especificidades médicas (). | Trazendo a experiência de uso fluida do dental para o mercado médico, com a complexidade do  resolvida no backend. |
+
+## ---
+
+**3\. Functional Requirements**
+
+### **3.1. Módulo: Identity & Access Management (IAM)**
+
+**Prioridade:** Crítica | **Esforço:** Médio | **Impacto:** Alto
+
+Descrição Detalhada:  
+Sistema de autenticação e autorização robusto, projetado para suportar a arquitetura multi-tenant e garantir conformidade com a LGPD. Deve gerenciar o ciclo de vida da identidade dos usuários, desde o convite até a desativação, assegurando que o acesso aos dados sensíveis seja estritamente controlado.  
+**Comportamento Esperado:**
+
+* Login via e-mail e senha com políticas de complexidade forçadas (mínimo 8 caracteres, alfanumérico, símbolo).  
+* Suporte a Autenticação de Dois Fatores (2FA) via App Autenticador (TOTP) ou SMS, obrigatório para perfis com acesso a dados clínicos (médicos) e financeiros (administradores).  
+* Recuperação de senha segura via token de e-mail com expiração curta (15 minutos).  
+* *Session Management:* Timeout automático após 15 minutos de inatividade para proteger dados em telas expostas.17
+
+**Regras de Negócio:**
+
+1. **Isolamento de Tenant:** Um usuário autenticado nunca pode acessar recursos de outro *tenant* (clínica), exceto se possuir um perfil explicitamente vinculado a múltiplos *tenants* (ex: um médico que atende em duas clínicas da mesma rede). O tenant\_id deve ser injetado em todas as queries de banco de dados.  
+2. **Hierarquia de Papéis (RBAC):**  
+   * Owner: Acesso total, incluindo gestão de assinatura e configuração de splits financeiros.  
+   * Admin: Acesso a configurações, relatórios financeiros e gestão de usuários, sem acesso clínico (configurável).  
+   * Médico: Acesso à sua agenda, prontuários de seus pacientes (ou todos, conforme regra da clínica) e seus relatórios de produção.  
+   * Recepção: Acesso a agendas, cadastro de pacientes. Sem acesso ao financeiro detalhado ou conteúdo sensível do PEP.  
+3. **Trilha de Auditoria (Audit Log):** Todas as ações de criação, leitura, atualização e exclusão (CRUD) em dados sensíveis (pacientes, prontuários) devem ser registradas com: User\_ID, Timestamp, IP\_Address, Action, Resource\_ID e Previous\_Value (para edições).18
+
+**Casos de Uso:**
+
+* *Como Dr. Lucas, quero convidar uma nova dermatologista para a clínica enviando um link por e-mail, onde ela mesma definirá sua senha.*  
+* *Como Administrador, quero revogar o acesso de uma secretária que foi desligada, garantindo que ela perca acesso imediatamente a todas as sessões ativas.*
+
+### **3.2. Módulo: Cadastros e Gestão de Pacientes**
+
+**Prioridade:** Alta | **Esforço:** Baixo | **Impacto:** Alto
+
+Descrição Detalhada:  
+O coração operacional da clínica. Este módulo gerencia o registro mestre de pacientes, garantindo a qualidade e unicidade dos dados, essenciais para o faturamento  e contato via WhatsApp.  
+**Comportamento Esperado:**
+
+* Busca inteligente de pacientes (nome, CPF, telefone, data de nascimento) com *debounce* para performance.  
+* Preenchimento automático de endereço via integração com API de CEP (ViaCEP ou similar).  
+* Upload e armazenamento de foto do paciente (webcam ou arquivo) para identificação visual na recepção.  
+* Histórico unificado: visualização de agendamentos passados, faltas, débitos e documentos em uma única tela ("Timeline do Paciente").
+
+**Regras de Negócio:**
+
+1. **Prevenção de Duplicidade:** O sistema deve impedir o cadastro de um novo paciente se o CPF já existir. Se o CPF não for informado, deve alertar sobre possíveis homônimos baseados em Nome \+ Data de Nascimento.  
+2. **Consentimento LGPD:** Deve haver um campo obrigatório para registro do consentimento de tratamento de dados, armazenando a versão da política de privacidade aceita e a data/hora do aceite.6  
+3. **Validação de Elegibilidade:** Ao cadastrar um convênio, o sistema deve validar a vigência da carteirinha (se a integração com a operadora estiver disponível) ou ao menos validar o formato do número da carteira conforme o padrão da operadora.
+
+### **3.3. Módulo: Agendamento Inteligente (Google Calendar Sync)**
+
+**Prioridade:** Crítica | **Esforço:** Alto | **Impacto:** Alto
+
+Descrição Detalhada:  
+Uma interface de calendário proprietária, otimizada para o fluxo clínico (agendamentos de 15, 20, 30 min), mas profundamente integrada ao Google Calendar para gestão de disponibilidade real do profissional. Visualização diária, semanal e mensal. Filtros por profissional, especialidade e sala/equipamento.Cores distintas para: Agendado, Confirmado, Aguardando (Sala de Espera), Em Atendimento, Atendido, Cancelado e Falta. **Confirmação Automatizada:** Integração com WhatsApp para envio de lembretes automáticos (24h ou 48h antes) com link para confirmação/cancelamento pelo paciente. **Lista de Espera Inteligente:** Funcionalidade "Encaixe" que notifica a recepção quando surge uma vaga para pacientes prioritários.
+
+* **Agendamento Online:** Link personalizado da clínica para o paciente agendar horários livres diretamente (integrado ao site/Instagram da clínica/Whatsapp).
+
+**Comportamento Esperado:**
+
+* **Sincronização Bidirecional:**  
+  * *MediFlow \-\> Google:* Consultas agendadas no MediFlow aparecem no Google Calendar do médico.  
+  * *Google \-\> MediFlow:* Eventos pessoais no Google Calendar (ex: "Dentista", "Almoço") bloqueiam automaticamente o horário no MediFlow, aparecendo apenas como "Ocupado \- Externo" para a secretária.8  
+* **Privacidade de Dados:** Os eventos enviados ao Google Calendar devem ter títulos anonimizados ou codificados (ex: "Consulta \- Pct 12345" ou apenas "Atendimento Clínico") para evitar exposição de PHI (Protected Health Information) em notificações de celular ou caso o médico compartilhe sua agenda Google com terceiros.9  
+* **Interface Drag-and-Drop:** Permitir reagendamento arrastando o "card" da consulta, com atualização automática no Google Calendar e disparo de notificação de alteração.
+
+**Regras de Negócio:**
+
+1. **Resolução de Conflitos:** Em caso de conflito de sincronização, a regra de negócio deve priorizar o bloqueio. Se um evento externo cai sobre uma consulta já marcada, o sistema deve gerar um alerta de "Conflito de Agenda" para a secretária resolver.  
+2. **Gestão de Cotas de API:** Implementar *exponential backoff* e filas de processamento para as chamadas à API do Google, evitando atingir os limites de *rate limiting* por projeto/usuário.20  
+3. **Autenticação Google:** Utilizar OAuth 2.0 para que cada médico autorize o acesso à sua agenda pessoal. Para agendas de recursos da clínica (Sala de Cirurgia, Aparelho de RX), utilizar *Service Accounts*.21
+
+**Casos de Uso:**
+
+* *Como Dr. Lucas, quero marcar um compromisso pessoal no meu celular (Google Calendar) e ter certeza de que a secretária não marcará um paciente nesse horário.*
+
+### **3.4. Módulo: Prontuário Eletrônico (PEP) e Prescrição**
+
+**Prioridade:** Crítica | **Esforço:** Muito Alto | **Impacto:** Crítico
+
+Descrição Detalhada:  
+Interface de documentação clínica que segue o padrão SOAP (Subjetivo, Objetivo, Avaliação, Plano), permitindo registro rápido, seguro e estruturado. Deve ser a "fonte da verdade" clínica.  
+**Comportamento Esperado:**
+
+* **Editor SOAP:** Campos de texto rico separados para cada etapa do atendimento. Suporte a modelos de texto (macros) para queixas comuns.  
+* **Customização de Anamnese:** Criador de formulários "drag-and-drop" para criar modelos específicos por especialidade (ex: ficha de dermatologia com mapa corporal, ficha de pediatria com curva de crescimento).  
+* **Integração Memed:** *Widget* ou integração via API da Memed embutida na tela de prescrição. O médico busca o medicamento, vê interações medicamentosas e preços, e gera a receita.23  
+* **Assinatura Digital:** Botão "Assinar e Finalizar" que invoca o certificado digital (A1 ou token A3) para assinar o documento, gerando um PDF com validade jurídica e timestamp.   
+* **Envio ao Paciente:** Disparo automático da receita assinada via SMS/WhatsApp (link seguro) diretamente pela interface da Memed ou do MediFlow.  
+* **Histórico Cronológico (Timeline):** Visualização unificada de todas as consultas, exames anexados e evoluções anteriores..  
+* **Gestão de Imagens e Documentos:** Upload de exames (PDF, JPG, DICOM viewer simples) e captura de fotos (antes e depois) diretamente pela câmera do dispositivo/app.  
+* **Telemedicina Nativa:** Sala de vídeo segura (peer-to-peer) integrada ao prontuário, com link enviado automaticamente ao paciente.  
+* **Módulo AI SCRIBE**: desenvolvido em paralelo para integração a este projeto: "D:\\MarcoAurélio\\PROJETOS IA\\MedFlow\\Módulo de Gravação e Resumo de Consultas Médicas.md" 
+
+**Regras de Negócio:**
+
+1. **Imutabilidade e Versionamento:** Após assinado eletronicamente, o prontuário é bloqueado para edição. Qualquer alteração subsequente deve ser feita através de um registro de "Adendo" ou "Retificação", mantendo a integridade do registro original para fins de auditoria e defesa médica.10  
+2. **CID-10 Obrigatório (Configurável):** Para guias de convênio, o preenchimento do CID-10 no campo de Avaliação/Diagnóstico pode ser configurado como obrigatório para evitar glosas.  
+3. **Acesso Emergencial:** Implementar funcionalidade "Break-the-glass", onde um médico pode acessar o prontuário de um paciente que não é seu em caso de emergência, com log de auditoria destacado e notificação ao responsável.
+
+### **3.6. Módulo: Gestão Financeira e Split de Pagamentos**
+
+**Prioridade:** Alta | **Esforço:** Alto | **Impacto:** Alto
+
+Descrição Detalhada:  
+Módulo financeiro integrado que controla Contas a Pagar/Receber, Fluxo de Caixa e, crucialmente, automatiza o repasse médico através de Split de Pagamentos na camada bancária.
+
+* **Frente de Caixa (PDV):** Abertura e fechamento de caixa diário. Lançamento rápido de recebimentos (Dinheiro, Cartão de Crédito/Débito, PIX \- com integração para baixa automática via QR Code dinâmico).  
+* **Gestão de Orçamentos:** Criação de orçamentos para procedimentos de alto valor (ex: cirurgias, pacotes estéticos) com validade e status de aprovação.  
+* **Controle de Pacotes/Sessões:** Gestão de venda de pacotes (ex: 10 sessões de fisioterapia). O sistema desconta automaticamente do saldo de sessões do paciente a cada agendamento.  
+* **Gestão de Repasses Médicos (Split de Pagamento):**  
+  * Configuração flexível de comissões (Porcentagem fixa, Valor fixo por procedimento, ou escalonado).  
+  * Relatório automático de "Contas a Pagar ao Médico" ao término da agenda do dia.   
+  * Emissão de recibo de pagamento físico;   
+* **Emissão de Documentos Fiscais:** Geração de Recibos simples e integração com prefeituras para emissão de NFS-e (Nota Fiscal de Serviços Eletrônica).  
+* **DRE Gerencial:** Demonstrativo de Resultados do Exercício simplificado (Receitas x Despesas \= Lucro).
+
+**Comportamento Esperado:**
+
+* **Motor de Regras de Repasse:** Interface para definir contratos: "Dr. A recebe 50% de consultas e 70% de procedimentos". "Dra. B recebe valor fixo de R$ 100 por plantão".  
+* **Integração Asaas/Stripe:** Ao gerar uma cobrança (boleto, Pix, cartão) para o paciente, o sistema envia a instrução de *split* para o gateway.  
+  * Exemplo: Cobrança de R$ 200,00. O gateway processa, desconta taxa (ex: R$ 5,00), e deposita R$ 97,50 na conta da Clínica e R$ 97,50 na conta digital do Médico (split 50%).13  
+* **Dashboard Financeiro:** Visão em tempo real de faturamento bruto, líquido, impostos estimados e repasses realizados.
+
+**Regras de Negócio:**
+
+1. **Dedução de Taxas:** O sistema deve permitir configurar se a taxa do meio de pagamento (MDR) é descontada do total antes do split, ou se é absorvida pela clínica ou pelo médico.30  
+2. **Imutabilidade Financeira:** Uma vez que um repasse foi processado pelo banco, o registro no sistema é travado. Estornos devem gerar uma nova transação negativa, não apagar a anterior.  
+3. **Wallet ID:** Cada médico deve ter sua walletId (conta Asaas/Stripe Connect) cadastrada e vinculada ao seu perfil para habilitar o split automático.13
+
+### **3.7. Módulo: Integração Futura com Bot WhatsApp**
+
+**Prioridade:** Média (Fase 4\) | **Esforço:** Alto | **Impacto:** Alto
+
+Descrição Detalhada:  
+Automação da comunicação com o paciente utilizando a API Oficial do WhatsApp Business (WABA).  
+**Comportamento Esperado:**
+
+* **Confirmação de Agenda:** Disparo automático de template message 24h antes da consulta: "Olá \[Nome\], sua consulta com é amanhã às \[Horário\]. Digite 1 para Confirmar, 2 para Reagendar".32  
+* **Atualização de Status:** A resposta do paciente atualiza o status do agendamento no sistema (Confirmado/Cancelado) em tempo real via Webhook.  
+* **Transbordo Humano:** Se o paciente digitar algo fora do fluxo padrão, o bot transfere a conversa para a interface de chat da recepção.
+
+**Regras de Negócio:**
+
+1. **Janela de 24h:** O bot só pode iniciar conversas ativas usando *Templates* pré-aprovados pela Meta. Mensagens livres só podem ser enviadas dentro da janela de 24h após a última mensagem do paciente.34  
+2. **Opt-in:** O paciente deve ter dado aceite para receber mensagens via WhatsApp (registrado no cadastro).
+
+### **3.8. Módulo de Estoque e Materiais**
+
+* **Cadastro de Produtos:** Controle de insumos (seringas, luvas, toxina botulínica, etc.).  
+* **Baixa Automática:** Vinculação de "Kits de Procedimento" ao agendamento (ex: ao realizar um procedimento X, baixa automaticamente 1 par de luvas e 5ml de soro).  
+* **Alertas:** Notificação de estoque mínimo e produtos próximos ao vencimento.  
+* Módulo de Patrimônio e Compras será desenvolvido em paralelo para integração posterior: "D:\\MarcoAurélio\\PROJETOS IA\\MedFlow\\Módulos de Patrimônio e Compras.md"
+
+### **3.9. CRM e Marketing (Fidelização)**
+
+* **Campanhas de Retorno:** Filtros para identificar pacientes que não retornam há X meses ou que precisam de reavaliação periódica.  
+* **Aniversariantes:** Disparo automático de mensagens de parabéns.
+
+## ---
+
+**4\. Technical Specifications**
+
+### **4.1. Arquitetura do Sistema**
+
+O sistema adotará uma arquitetura de **Monolito Modular** (*Modular Monolith*), evoluindo para microsserviços apenas quando a escala exigir. Esta abordagem equilibra a simplicidade de desenvolvimento e *deploy* inicial com a capacidade de manter limites claros entre os domínios (Agendamento, Financeiro, Clínico).
+
+Padrão de Multi-tenancy:  
+A estratégia escolhida é Banco de Dados Compartilhado com Schemas Separados (Schema-per-tenant) sobre PostgreSQL.
+
+* *Justificativa:* O isolamento de dados é crítico em saúde. Usar uma única tabela com coluna tenant\_id (Row-level) traz riscos de vazamento de dados por erro de query. Usar um banco de dados por cliente é custoso e difícil de manter na infraestrutura. *Schema-per-tenant* oferece o melhor equilíbrio: isolamento lógico robusto (um SELECT \* FROM patients no schema da Clínica A jamais retornará dados da Clínica B) com eficiência de recursos compartilhados.35
+
+### **4.2. Stack Tecnológico**
+
+* **Frontend:**  
+  * Framework: **React.js** (ou Next.js para SSR e SEO nas páginas públicas).  
+  * Linguagem: **TypeScript** (tipagem estrita para evitar erros em dados de saúde).  
+  * Estado: **React Query** (gerenciamento de dados do servidor) \+ Context API.  
+  * UI Kit: **Tailwind CSS** \+ **Shadcn/UI** (componentes acessíveis e customizáveis).  
+* **Backend:**  
+  * Framework: **Node.js** com **NestJS**. O NestJS impõe uma estrutura modular que facilita a separação de domínios (, Financeiro, Auth).  
+  * ORM: **Prisma** ou **TypeORM** (excelente suporte a TypeScript e migrations).  
+  * Validação: **Zod** (validação de schemas runtime, crucial para ).  
+* **Banco de Dados:**  
+  * Relacional: **PostgreSQL** (versão 15+).  
+  * Cache/Filas: **Redis** (para filas de envio de e-mail/WhatsApp e cache de consultas pesadas).  
+* **Infraestrutura:**  
+  * Cloud: **AWS** (Amazon Web Services).  
+  * Containerização: **Docker**.  
+  * Orquestração: **Amazon ECS** (mais simples que Kubernetes para o estágio inicial) ou **EKS** (se houver expertise na equipe).38  
+  * CI/CD: **GitHub Actions**.
+
+### **4.3. Componentes do Sistema (Diagrama Textual C4 \- Nível Container)**
+
+1. **Web App (SPA):** Aplicação React carregada no navegador do usuário.  
+2. **API Gateway / Load Balancer:** Ponto de entrada (AWS ALB), gerencia SSL e roteia tráfego.  
+3. **Backend API (NestJS):**  
+   * *Auth Module:* Gerencia tokens JWT e sessões.  
+   * *Tenant Manager:* Middleware que identifica o subdomain ou header e conecta ao Schema correto do Postgres.  
+   *  *Engine:* Módulo isolado com lógica de XML e validação XSD.  
+   * *Split Engine:* Comunica-se com gateways de pagamento.  
+4. **Database (PostgreSQL):**  
+   * *Schema public:* Tabela de tenants, users globais, subscriptions.  
+   * *Schema tenant\_uuid:* Tabelas de patients, appointments, medical\_records, financials.  
+5. **Worker Service:** Processos em background para geração de relatórios pesados, envio de e-mails e comunicação assíncrona com Google Calendar.
+
+### **4.4. Especificação da API (Exemplos)**
+
+#### **4.4.1. Endpoint: Criação de Consulta (com Sync Google)**
+
+POST /api/v1/appointments
+
+JSON
+
+{  
+  "patientId": "uuid-paciente",  
+  "doctorId": "uuid-medico",  
+  "startTime": "2026-05-20T14:00:00Z",  
+  "endTime": "2026-05-20T14:30:00Z",  
+  "procedureIds": \["uuid-proc-consulta"\],  
+  "insuranceId": "uuid-convenio-unimed"  
+}
+
+*Response:* 201 Created
+
+JSON
+
+{  
+  "id": "uuid-appointment",  
+  "status": "scheduled",  
+  "googleEventId": "abc123xyz", // ID retornado pelo Google Calendar  
+  "syncStatus": "synced"  
+}
+
+#### **4.4.2. Endpoint: Validação** 
+
+POST /api/v1//validate  
+Payload: Objeto da Guia completo.  
+Response: 200 OK (se válido) ou 422 Unprocessable Entity (se inválido).
+
+JSON
+
+{  
+  "valid": false,  
+  "errors":  
+}
+
+#### **4.4.3. Endpoint: Webhook de Pagamento (Asaas)**
+
+POST /api/webhooks/asaas/payment  
+Payload: Evento de pagamento confirmado.  
+Ação: O sistema identifica a cobrança, atualiza o status financeiro para "Pago", registra o recebimento na conta da clínica e o crédito futuro na conta do médico (espelho do split bancário).
+
+### **4.5. Esquema de Banco de Dados (Principais Tabelas)**
+
+#### **Tabela: tenants (Schema Public)**
+
+| Coluna | Tipo | Descrição |
+| :---- | :---- | :---- |
+| id | UUID (PK) | Identificador único da clínica |
+| name | VARCHAR | Razão Social |
+| cnpj | VARCHAR | Identificador fiscal |
+| db\_schema | VARCHAR | Nome do schema no Postgres (ex: tenant\_123) |
+| status | VARCHAR | Ativo, Suspenso, Cancelado |
+
+#### **Tabela: medical\_records (Schema do Tenant)**
+
+| Coluna | Tipo | Descrição |
+| :---- | :---- | :---- |
+| id | UUID (PK) | Identificador do prontuário |
+| patient\_id | UUID (FK) | Vínculo com paciente |
+| doctor\_id | UUID (FK) | Autor do registro |
+| data\_json | JSONB | Conteúdo SOAP estruturado |
+| signed | BOOLEAN | Se foi assinado digitalmente |
+| signature\_hash | VARCHAR | Hash da assinatura ICP-Brasil |
+| created\_at | TIMESTAMP | Data de criação |
+
+#### **Tabela: financial\_splits (Schema do Tenant)**
+
+| Coluna | Tipo | Descrição |
+| :---- | :---- | :---- |
+| id | UUID (PK) | Identificador do split |
+| transaction\_id | UUID (FK) | Vínculo com a transação original |
+| recipient\_id | UUID (FK) | Médico recebedor |
+| amount | DECIMAL | Valor repassado |
+| percentage | DECIMAL | % aplicada na regra |
+| status | VARCHAR | PENDING, DONE, FAILED |
+| gateway\_id | VARCHAR | ID do split no Asaas/Stripe |
+
+### **4.6. Integrações Externas**
+
+1. **Google Calendar API:**  
+   * Utilizar a biblioteca oficial googleapis para Node.js.  
+   * Implementar watch (Webhooks) para receber notificações de mudanças no calendário do Google em tempo real, evitando *polling* excessivo.20  
+2. **API  (Orizon/ConnectMed ou Própria):**  
+   * Como a ANS padroniza o XML mas não a transmissão (algumas operadoras usam WS, outras upload de arquivo), o MediFlow gerará o arquivo físico (.xml) e, onde houver API de operadora disponível (ex: via Orizon), fará a transmissão direta.  
+3. **Memed:**  
+   * Integração via *Prescription Widget*. O MediFlow gera um token JWT assinado com os dados do médico e paciente e abre o iframe da Memed. A Memed retorna o evento de prescriptionGenerated para que o MediFlow salve o PDF no prontuário.39
+
+## ---
+
+**5\. User Stories**
+
+### **Épico 1: Operações Médicas e PEP**
+
+#### **Story 1.1: Emissão de Prescrição Digital Inteligente**
+
+Como Médico especialista,  
+Quero buscar medicamentos por princípio ativo e prescrever utilizando a base da Memed dentro do prontuário,  
+Para que eu seja alertado sobre interações medicamentosas e possa enviar a receita digital assinada diretamente para o WhatsApp do paciente, sem papel.  
+**Critérios de Aceite:**
+
+* \[ \] O sistema deve carregar o widget da Memed com os dados do paciente (Nome, Celular) pré-preenchidos.  
+* \[ \] Ao adicionar um medicamento, o sistema deve verificar alergias cadastradas no prontuário (se a integração suportar).  
+* \[ \] O médico deve poder assinar digitalmente (certificado A1/A3) com um clique.  
+* \[ \] Após a assinatura, o link da receita deve ser enviado automaticamente via SMS/WhatsApp pela Memed.  
+* \[ \] Uma cópia PDF da receita deve ser salva automaticamente no histórico do paciente no MediFlow.
+
+#### **Story 1.2: Registro Clínico SOAP com Versionamento**
+
+Como Médico,  
+Quero registrar a evolução do paciente usando o método SOAP,  
+Para que o histórico fique organizado e eu tenha respaldo legal sobre o atendimento.  
+**Critérios de Aceite:**
+
+* \[ \] Interface com 4 campos de texto livre: Subjetivo, Objetivo, Avaliação, Plano.  
+* \[ \] Funcionalidade de "Auto-save" a cada 30 segundos para evitar perda de dados.  
+* \[ \] Botão "Finalizar Atendimento" bloqueia a edição do registro.  
+* \[ \] Permitir a criação de "Retificação" para registros já finalizados, mantendo o original visível mas marcado como "Retificado".
+
+### **Épico 2: Agendamento e Sincronização**
+
+#### **Story 2.1: Sincronização Bidirecional com Google Calendar**
+
+Como Secretária,  
+Quero que o sistema me avise se o médico marcou um compromisso pessoal no horário que estou tentando agendar,  
+Para que eu não crie conflitos de agenda e o médico não precise me avisar manualmente de cada compromisso.  
+**Critérios de Aceite:**
+
+* \[ \] Eventos criados no Google Calendar do médico devem aparecer na agenda do MediFlow como blocos cinzas "Ocupado".  
+* \[ \] Ao tentar agendar sobre um bloco "Ocupado", o sistema deve exibir um alerta bloqueante (ou aviso de confirmação, configurável).  
+* \[ \] Agendamentos criados no MediFlow devem aparecer quase instantaneamente (\< 1 min) no celular do médico (Google Calendar).  
+* \[ \] Dados sensíveis do paciente não devem ir para o Google Calendar (usar iniciais ou ID).
+
+### **Épico 3: Financeiro e Faturamento**
+
+#### **Story 3.1: Automação de Repasse Médico (Split)**
+
+Como Administrador da Clínica,  
+Quero configurar regras de comissão para cada médico e ver os pagamentos sendo divididos automaticamente,  
+Para que eu elimine as planilhas de fechamento mensal e reduza erros de cálculo.  
+**Critérios de Aceite:**
+
+* \[ \] Tela de configuração de regras: % por procedimento, valor fixo, deduções de impostos/taxas.  
+* \[ \] Ao receber um pagamento via Pix/Cartão integrado, o sistema deve criar dois registros de extrato: Entrada (valor total) e Saída Futura (valor do médico).  
+* \[ \] Integração com API de Split (Asaas) deve enviar a instrução de divisão no momento da criação da cobrança (transaction-time split).  
+* \[ \] Relatório de "Produção Médica" deve bater centavo a centavo com os valores repassados.
+
+#### **Story 3.2: Geração de Lote  Sem Erros**
+
+Como Faturista,  
+Quero que o sistema valide as guias antes de eu fechar o lote,  
+Para que eu não envie arquivos com erros bobos (ex: falta de CNS) que causarão glosas.  
+**Critérios de Aceite:**
+
+* \[ \] O sistema deve validar cada guia contra o schema XSD da versão  ativa.  
+* \[ \] Campos obrigatórios vazios devem ser destacados em vermelho com link direto para correção.  
+* \[ \] A exportação do XML só deve ser permitida se 100% das guias do lote estiverem validadas.
+
+## ---
+
+**6\. Testing Criteria**
+
+### **Estratégia de Testes**
+
+Utilizaremos a Pirâmide de Testes para garantir qualidade com velocidade.
+
+1. **Testes Unitários (70%):** Foco na lógica de negócios pura.  
+   * *Framework:* Jest.  
+   * *Alvos:* Cálculo de repasse financeiro (arredondamentos, porcentagens), validação de regras de campos , lógica de conflito de agenda.  
+2. **Testes de Integração (20%):** Foco na comunicação entre módulos e banco de dados.  
+   * *Framework:* Supertest (para API) \+ Testcontainers (Docker com Postgres real).  
+   * *Alvos:* Persistência de dados no schema correto do tenant, fluxo de autenticação e geração de token, integração com mock do Google Calendar.  
+3. **Testes E2E (10%):** Foco nos fluxos críticos do usuário.  
+   * *Framework:* Playwright ou Cypress.  
+   * *Cenários:* Login \-\> Cadastro de Paciente \-\> Agendamento \-\> Atendimento (PEP) \-\> Geração de .
+
+### **Critérios de Aceite para Testes**
+
+#### **1\. Geração de XML** 
+
+* **Cenário:** Gerar lote com 10 guias de consulta.  
+* **Validação:** O XML gerado deve passar no validador oficial da ANS (aplicativo  Verificador) sem erros e sem avisos.  
+* **Teste de Regressão:** Garantir que guias antigas (versão 3.05.00) ainda possam ser geradas se configurado, sem quebrar com a lógica da 4.01.00.
+
+#### **2\. Precisão do Split Financeiro**
+
+* **Cenário:** Procedimento de R$ 350,00. Taxa Cartão 2%. Split Médico 60% do Líquido.  
+* **Cálculo Esperado:**  
+  * Bruto: 350,00  
+  * Taxa: 7,00 (350 \* 0.02)  
+  * Líquido Base: 343,00  
+  * Médico: 205,80 (343 \* 0.60)  
+  * Clínica: 137,20 (343 \* 0.40)  
+* **Teste:** O sistema deve registrar exatamente 205,80 na conta corrente do médico e 137,20 na da clínica.
+
+#### **3\. Segurança e Isolamento**
+
+* **Cenário:** Injeção de SQL ou vazamento de Tenant.  
+* **Teste:** Tentar acessar /api/patients/ID\_DE\_OUTRO\_TENANT autenticado como usuário de um tenant diferente.  
+* **Resultado Esperado:** O sistema deve retornar 404 Not Found (preferível a 403 para não revelar existência do recurso). A query ao banco deve forçar o search\_path ou filtro tenant\_id.
+
+### **Testes de Performance**
+
+* **Load Testing:** Simular 500 usuários concorrentes acessando a agenda simultaneamente.  
+* **Meta:** Tempo de resposta da API de listagem de agendamentos (GET /appointments) deve permanecer abaixo de 200ms no percentil 95 (p95).
+
+## ---
+
+**7\. Timeline & Roadmap**
+
+### **Fase 1: Fundação (Meses 1-2)**
+
+* **Infraestrutura:** Setup do ambiente AWS (EKS/RDS), pipelines de CI/CD.  
+* **Arquitetura:** Implementação do esqueleto NestJS e estratégia de multi-tenancy (Schema isolation).  
+* **IAM:** Sistema de Login, Recuperação de Senha e Gestão de Usuários.  
+* **Cadastros:** CRUD de Pacientes e Profissionais.
+
+### **Fase 2: Core Clínico e Agendamento (Meses 3-4)**
+
+* **Agenda:** Interface de calendário, CRUD de agendamentos.  
+* **Integração Google:** Implementação da sincronização OAuth e Webhooks.  
+* **PEP Básico:** Editor SOAP e histórico clínico.  
+* **Memed:** Integração inicial para prescrições.
+
+### **Fase 3: Financeiro e  (Meses 5-6)**
+
+*  **Engine:** Implementação dos layouts XML (Consulta e SP/SADT) e validador.  
+* **Financeiro:** Contas a Pagar/Receber e Integração com Asaas (Split).  
+* **MVP Release (Alpha):** Liberação para 5 clínicas parceiras testarem em ambiente controlado.
+
+### **Fase 4: Refinamento e Expansão (Meses 7-9)**
+
+* **WhatsApp Bot:** Desenvolvimento da integração com BSP (Business Solution Provider) para confirmação de consultas.  
+* **Relatórios:** Dashboards de BI (Faturamento, Produção Médica, No-Show).  
+* **Beta Aberto:** Lançamento comercial restrito.
+
+### **Riscos e Mitigações**
+
+1. **Risco:** Complexidade da Integração  (regras não documentadas das operadoras).  
+   * *Mitigação:* Criar um motor de regras flexível (Rule Engine) que permita cadastrar exceções por convênio sem alterar o código fonte ("Data-driven validation").  
+2. **Risco:** Google Calendar Quota Limits.  
+   * *Mitigação:* Solicitar aumento de cota logo no início do projeto e implementar *caching* agressivo da agenda no banco local.  
+3. **Risco:** Adesão dos médicos ao PEP.  
+   * *Mitigação:* Investir pesadamente em UX/UI para fazer o PEP ser mais rápido que o papel. Uso de macros e autocompletar.
+
+### **Recursos Necessários**
+
+* **Equipe:** 1 Tech Lead, 2 Backend Devs (Node/Nest), 2 Frontend Devs (React), 1 UI/UX Designer, 1 QA Engineer.  
+* **Ferramentas:** Jira (Gestão), Figma (Design), GitHub (Código), AWS (Cloud), Asaas (Pagamentos), Twilio/Wati (WhatsApp).
+
+---
+
+**Aprovações:**
+
+* \[ \] Product Manager  
+* \[ \] Tech Lead  
+* \[ \] UI/UX Designer  
+* \[ \] Legal/Compliance (LGPD check)
+
+### ---
+
+**Tabela Auxiliar 1: Campos Obrigatórios  (Guia de Consulta \- Exemplo)**
+
+| Campo | Descrição | Obrigatório? | Regra de Validação | Fonte |
+| :---- | :---- | :---- | :---- | :---- |
+| **Registro ANS** | Código da Operadora na ANS | Sim | Numérico, 6 dígitos. Deve existir na base da ANS. | 12 |
+| **Número da Guia** | Identificador único da guia no prestador | Sim | Até 20 caracteres. Único por prestador. | 12 |
+| **Número da Carteira** | Identificação do beneficiário | Sim | Validar formato conforme padrão da operadora (ex: Unimed tem regra de check-digit). | 40 |
+| **Nome do Beneficiário** | Nome completo do paciente | Sim | Máx 70 caracteres, sem caracteres especiais. | 40 |
+| **CNES** | Cadastro Nacional de Estabelecimento de Saúde | Sim | Numérico, 7 dígitos. Validar na base do DATASUS. | 28 |
+| **Código TUSS** | Código do procedimento | Sim | Deve existir na tabela TUSS vigente (ex: 10101012 para Consulta). | 41 |
+| **CBOS** | Classificação Brasileira de Ocupações | Sim | Código de 6 dígitos (ex: 2251-25). Deve ser compatível com a especialidade do médico. | 28 |
+
+---
+
+*(Fim do Relatório PRD)*
+
+## **Análise Detalhada e Insights (Segunda e Terceira Ordem)**
+
+### **Aprofundamento: A Importância Estratégica da Automação do "Repasse Médico"**
+
+A inclusão de pagamentos com split automático não é apenas uma conveniência operacional; é um mecanismo estratégico de retenção (*lock-in*).
+
+* **Insight:** Clínicas perdem receita não apenas por glosas externas, mas por "vazamentos" internos — erros no cálculo do que é devido aos médicos, pagamentos duplicados ou esquecidos. Ao automatizar isso com um sistema de razão (ledger) vinculado diretamente ao gateway de pagamento (Asaas/Stripe), o MediFlow se torna a "fonte da verdade" financeira incontestável.  
+* **Efeito em Cascata:** Isso aumenta a retenção dos médicos na clínica. Um médico tem menos probabilidade de deixar uma clínica que o paga com precisão, transparência e rapidez (D+1 ou conforme liquidação). Além disso, a *clínica* se torna dependente do software para sua integridade financeira, reduzindo drasticamente o *churn* do SaaS.  
+* **Implicação Técnica:** O design do banco de dados deve suportar logs financeiros imutáveis (*double-entry bookkeeping*). Uma vez que um split é calculado e a instrução enviada ao gateway, o registro local não pode ser alterado, apenas compensado por uma nova transação.
+
+### **Aprofundamento:  como Barreira de Entrada vs. Vantagem Competitiva**
+
+A implementação do  é notoriamente difícil devido à verbosidade do XML e às regras de validação específicas de cada operadora (muitas vezes regras não escritas ou "tribais").
+
+* **Insight:** Enquanto o  é um fardo regulatório para novos entrantes no mercado de software, um motor  *perfeito* é uma vantagem competitiva massiva. A maioria dos concorrentes luta aqui, entregando validadores genéricos que deixam passar erros.  
+* **Estratégia:** Construir um "Motor de Validação " desacoplado da aplicação principal. Este motor roda centenas de regras (XSD \+ Regras Customizadas de Operadoras) em tempo real enquanto a secretária digita.  
+* **Benefício:** A promessa de "Glosa Zero Administrativa". Se o sistema sinaliza o erro antes do envio, a clínica economiza meses de atraso no fluxo de caixa (ciclo de glosa \-\> recurso \-\> pagamento). Isso é um argumento de venda poderoso para a Persona Dr. Lucas.
+
+### **Aprofundamento: Multi-tenancy e Isolamento de Dados em HealthTech**
+
+* **Contexto:** A LGPD impõe multas pesadas por vazamento de dados. Em um ambiente *multi-tenant*, "vizinhos barulhentos" ou bugs de software poderiam teoricamente expor dados de uma clínica para outra.  
+* **Escolha Arquitetural:** "Schema-per-tenant" oferece o melhor equilíbrio.  
+  * *Shared Database:* Custo-efetivo (uma instância RDS).  
+  * *Separate Schemas:* Schemas do Postgres agem como firewalls lógicos. Uma injeção de SQL em um schema dificilmente cruzará para outro se as permissões do usuário do banco de dados forem escopadas corretamente no momento da conexão.  
+  * *Impacto:* Isso aumenta a complexidade de DevOps (gerenciar milhares de migrations), mas é um "preço a pagar" necessário para a confiança no domínio de Saúde.
+
+### **Aprofundamento: A "Zona Cinzenta" do WhatsApp e Compliance**
+
+* **Tendência:** Pacientes esperam ser atendidos via WhatsApp.  
+* **Risco:** O uso de WhatsApp pessoal (do médico ou da secretária) para agendamento e troca de exames viola a governança de dados (os dados estão no aparelho físico, não no servidor da clínica, e não há audit trail).  
+* **Solução:** A integração com a API do WhatsApp Business (WABA) centraliza a comunicação. Os dados residem no MediFlow, não em um dispositivo físico.  
+* **Funcionalidade Chave:** "Inbox de Equipe" \- A secretária vê todos os chats. O médico pode intervir se necessário.  
+* **Automação:** O bot lida com a interação mundana de "Confirmar?", que constitui 80% do tráfego, liberando o humano para interações de alto valor (dúvidas sobre procedimentos, acolhimento).
+
+### **Aprofundamento: Integração Google Calendar \- A Disponibilidade "Real"**
+
+* **Insight:** Médicos vivem em seus Google Calendars pessoais. Um software de clínica que ignora isso resultará em *double bookings* (agendar paciente na hora que o médico tem um compromisso pessoal).  
+* **Mecanismo:** A sincronização deve ser *autoritativa* e quase em tempo real.  
+  * *MediFlow \-\> Google:* Empurrar detalhes da consulta (mascarados por privacidade).  
+  * *Google \-\> MediFlow:* Puxar blocos de "Ocupado".  
+  * *Latência:* Deve ser via Webhooks (Push). O *polling* a cada 15 minutos é insuficiente para uma clínica movimentada, onde um horário pode ser preenchido em segundos.
+
+Ao executar este PRD, o MediFlow ataca as ineficiências estruturais do mercado brasileiro com uma abordagem *tech-first* que prioriza conformidade, transparência financeira e fluidez operacional.
+
+#### **Referências citadas**
+
+1. Atração de pacientes \+ Gestão eficiente | Doctoralia \+ Feegow, acessado em dezembro 11, 2025, [https://feegowclinic.com.br/produtos/feegow-clinic-doctoralia](https://feegowclinic.com.br/produtos/feegow-clinic-doctoralia)  
+2. 4 funcionalidades que um software de gestão de clínicas precisa ter \- Linx, acessado em dezembro 11, 2025, [https://www.linx.com.br/blog/4-funcionalidades-indispensaveis-em-um-software-de-gestao-de-clinicas/](https://www.linx.com.br/blog/4-funcionalidades-indispensaveis-em-um-software-de-gestao-de-clinicas/)  
+3. Como fazer faturamento : passo a passo \- Versatilis, acessado em dezembro 11, 2025, [https://versatilis.com.br/como-fazer-faturamento-/](https://versatilis.com.br/como-fazer-faturamento-tiss/)  
+4. Como fazer o faturamento  \- Dr Click, acessado em dezembro 11, 2025, [https://drclick.com.br/como-fazer-o-faturamento-/](https://drclick.com.br/como-fazer-o-faturamento-tiss/)  
+5. Como um software de gestão organiza o repasse médico \- Amplimed, acessado em dezembro 11, 2025, [https://www.amplimed.com.br/blog/repasse-medico-passo-a-passo/](https://www.amplimed.com.br/blog/repasse-medico-passo-a-passo/)  
+6. Dados sensíveis — LGPD \- Lei Geral de Proteção de Dados Pessoais \- Serpro, acessado em dezembro 11, 2025, [https://www.serpro.gov.br/lgpd/menu/protecao-de-dados/dados-sensiveis-lgpd](https://www.serpro.gov.br/lgpd/menu/protecao-de-dados/dados-sensiveis-lgpd)  
+7. LGPD na área da saúde \- BVS, acessado em dezembro 11, 2025, [https://docs.bvsalud.org/biblioref/2021/05/1224079/femina-2021-493-p156-160-perguntas-e-respostas-sobre-a-lgpd-na\_mQFOlCL.pdf](https://docs.bvsalud.org/biblioref/2021/05/1224079/femina-2021-493-p156-160-perguntas-e-respostas-sobre-a-lgpd-na_mQFOlCL.pdf)  
+8. Connect Practice EHR to Google Calendar (no code & HIPAA-compliant) \- Keragon, acessado em dezembro 11, 2025, [https://www.keragon.com/integration/practice-ehr-google-calendar](https://www.keragon.com/integration/practice-ehr-google-calendar)  
+9. Can I use Google Calendar and be HIPAA compliant? (2025 update), acessado em dezembro 11, 2025, [https://hipaatimes.com/can-i-use-google-calendar-and-be-hipaa-compliant-2025-update](https://hipaatimes.com/can-i-use-google-calendar-and-be-hipaa-compliant-2025-update)  
+10. CONSULTA Nº 201.164/21 \- CFM, acessado em dezembro 11, 2025, [https://sistemas.cfm.org.br/normas/arquivos/pareceres/SP/2021/201164\_2021.pdf](https://sistemas.cfm.org.br/normas/arquivos/pareceres/SP/2021/201164_2021.pdf)  
+11. Prontuário médico do paciente: o que preciso saber? \- Sanarmed, acessado em dezembro 11, 2025, [https://sanarmed.com/prontuario-medico-do-paciente-tudo-o-que-voce-precisa-saber-colunistas-2/](https://sanarmed.com/prontuario-medico-do-paciente-tudo-o-que-voce-precisa-saber-colunistas-2/)  
+12. INSTRUÇÕES DE PREENCHIMENTO GUIAS  4.01.00 \- ConnectMed, acessado em dezembro 11, 2025, [https://wwwt.connectmed.com.br/connectivity/images/Manual\_.pdf](https://wwwt.connectmed.com.br/connectivity/images/Manual_TISS.pdf)  
+13. Overview \- Asaas \- Documentação API, acessado em dezembro 11, 2025, [https://docs.asaas.com/docs/payment-split-overview](https://docs.asaas.com/docs/payment-split-overview)  
+14. Create separate charges and transfers \- Stripe Documentation, acessado em dezembro 11, 2025, [https://docs.stripe.com/connect/separate-charges-and-transfers](https://docs.stripe.com/connect/separate-charges-and-transfers)  
+15. Os Melhores Softwares para Clínicas e Consultórios em 2025 \- Peres & Fernandes, acessado em dezembro 11, 2025, [https://peresefernandes.com.br/nexclin/os-melhores-softwares-para-clinicas-e-consultorios-em-2025/](https://peresefernandes.com.br/nexclin/os-melhores-softwares-para-clinicas-e-consultorios-em-2025/)  
+16. Conecte Doctoralia e Feegow para gerenciar sua clínica em um só lugar, acessado em dezembro 11, 2025, [https://pro.doctoralia.com.br/produto/portal-do-paciente](https://pro.doctoralia.com.br/produto/portal-do-paciente)  
+17. Certificado SBIS: Segurança e Qualidade na Saúde Digital \- Soluti, acessado em dezembro 11, 2025, [https://conteudo.soluti.com.br/certificado-sbis-o-selo-essencial-para-solucoes-em-saude-digital/](https://conteudo.soluti.com.br/certificado-sbis-o-selo-essencial-para-solucoes-em-saude-digital/)  
+18. Multi-Tenant SaaS Architectures: Design Principles and Security Considerations, acessado em dezembro 11, 2025, [https://www.researchgate.net/publication/391673039\_Multi-Tenant\_SaaS\_Architectures\_Design\_Principles\_and\_Security\_Considerations](https://www.researchgate.net/publication/391673039_Multi-Tenant_SaaS_Architectures_Design_Principles_and_Security_Considerations)  
+19. Is Google Calendar Reminder HIPAA Compliant? What You Need to Know \- Security Ideals, acessado em dezembro 11, 2025, [https://securityideals.com/learn/blog/is-google-calendar-reminder-hipaa-compliant-what-healthcare-providers-need-to-know](https://securityideals.com/learn/blog/is-google-calendar-reminder-hipaa-compliant-what-healthcare-providers-need-to-know)  
+20. Manage quotas | Google Calendar, acessado em dezembro 11, 2025, [https://developers.google.com/workspace/calendar/api/guides/quota](https://developers.google.com/workspace/calendar/api/guides/quota)  
+21. Using OAuth 2.0 to Access Google APIs | Authorization, acessado em dezembro 11, 2025, [https://developers.google.com/identity/protocols/oauth2](https://developers.google.com/identity/protocols/oauth2)  
+22. Using OAuth 2.0 for Server to Server Applications | Authorization \- Google for Developers, acessado em dezembro 11, 2025, [https://developers.google.com/identity/protocols/oauth2/service-account](https://developers.google.com/identity/protocols/oauth2/service-account)  
+23. Aprenda a gerar sua receita digital Memed com Feegow Clinic, acessado em dezembro 11, 2025, [https://feegowclinic.com.br/blog/receita-digital-memed](https://feegowclinic.com.br/blog/receita-digital-memed)  
+24. Conheça a Memed\! Soluções Digitais para Médicos e Pacientes, acessado em dezembro 11, 2025, [https://memed.com.br/](https://memed.com.br/)  
+25. Resolução CFM nº 1.821 de 11/07/2007 \- Federal \- LegisWeb, acessado em dezembro 11, 2025, [https://www.legisweb.com.br/legislacao/?id=106041](https://www.legisweb.com.br/legislacao/?id=106041)  
+26. Portal  \- Usisaúde \- FSFX, acessado em dezembro 11, 2025, [https://www.fsfx.com.br/usisaude/portal-/](https://www.fsfx.com.br/usisaude/portal-tiss/)  
+27. Manual Do Usuário Autorize \- Integração Técnica WS V3.05.00 | PDF | Serviço de internet, acessado em dezembro 11, 2025, [https://pt.scribd.com/document/587760277/20210224-Manual-do-Usuario-Autorize-Integracao-Tecnica-WS-V3-05-00-1](https://pt.scribd.com/document/587760277/20210224-Manual-do-Usuario-Autorize-Integracao-Tecnica-WS-V3-05-00-1)  
+28. ANS \- PADRÃO , acessado em dezembro 11, 2025, [https://www.gov.br/ans/pt-br/assuntos/prestadores/padrao-para-troca-de-informacao-de-saude-suplementar-2013-/Padro\_ComponenteOrganizacional\_202207.pdf](https://www.gov.br/ans/pt-br/assuntos/prestadores/padrao-para-troca-de-informacao-de-saude-suplementar-2013-tiss/PadroTISS_ComponenteOrganizacional_202207.pdf)  
+29. Manual do referenciado  \- SulAmérica, acessado em dezembro 11, 2025, [https://saude.sulamericaseguros.com.br/prestador/informativos/manual\_referenciado\_\_2021.pdf](https://saude.sulamericaseguros.com.br/prestador/informativos/manual_referenciado_TISS_2021.pdf)  
+30. Módulo de Repasses para Clínicas Médicas \- GestãoDS, acessado em dezembro 11, 2025, [https://www.gestaods.com.br/funcionalidades/modulo-de-repasses/](https://www.gestaods.com.br/funcionalidades/modulo-de-repasses/)  
+31. Split in single payments \- Asaas \- Documentação API, acessado em dezembro 11, 2025, [https://docs.asaas.com/docs/split-in-single-payments](https://docs.asaas.com/docs/split-in-single-payments)  
+32. Appointment Confirmation \- Wati.io, acessado em dezembro 11, 2025, [https://www.wati.io/whatsapp-template/appointment-confirmation/](https://www.wati.io/whatsapp-template/appointment-confirmation/)  
+33. Free healthcare WhatsApp message templates for appointment & rescheduling \- Gallabox, acessado em dezembro 11, 2025, [https://gallabox.com/resources/free-whatsapp-message-templates/healthcare-appointment-booking](https://gallabox.com/resources/free-whatsapp-message-templates/healthcare-appointment-booking)  
+34. Ultimate Guide to WhatsApp Business API Chatbot Implementation | 2Factor.in, acessado em dezembro 11, 2025, [https://2factor.in/v3/lp/official-whatsapp-business-api/building-whatsapp-chatbots.php](https://2factor.in/v3/lp/official-whatsapp-business-api/building-whatsapp-chatbots.php)  
+35. Implement multi-tenancy in Spanner \- Google Cloud Documentation, acessado em dezembro 11, 2025, [https://docs.cloud.google.com/spanner/docs/implement-multi-tenancy](https://docs.cloud.google.com/spanner/docs/implement-multi-tenancy)  
+36. Arquitetando aplicações multi-tenant | by Juliano Firme \- Medium, acessado em dezembro 11, 2025, [https://medium.com/@julianofirme23/arquitetando-aplica%C3%A7%C3%B5es-multi-tenant-542db1136778](https://medium.com/@julianofirme23/arquitetando-aplica%C3%A7%C3%B5es-multi-tenant-542db1136778)  
+37. Database-per-tenant {Explicando Padrões de arquitetura de banco de dados multilocatários} \- DEV Community, acessado em dezembro 11, 2025, [https://dev.to/alexandrejusten/database-per-tenant-explicando-padroes-de-arquitetura-de-banco-de-dados-multilocatarios-2kpj](https://dev.to/alexandrejusten/database-per-tenant-explicando-padroes-de-arquitetura-de-banco-de-dados-multilocatarios-2kpj)  
+38. Criando uma solução SaaS multi-tenant usando o Amazon EKS | O blog da AWS, acessado em dezembro 11, 2025, [https://aws.amazon.com/pt/blogs/aws-brasil/criando-uma-solucao-saas-multi-tenant-usando-o-amazon-eks/](https://aws.amazon.com/pt/blogs/aws-brasil/criando-uma-solucao-saas-multi-tenant-usando-o-amazon-eks/)  
+39. Condições gerais de licenciamento de uso da plataforma na modalidade Software as a Service "SAAS" \- Médicos, acessado em dezembro 11, 2025, [https://suporte-medico.memed.com.br/hc/pt-br/articles/9419131744155-Condi%C3%A7%C3%B5es-gerais-de-licenciamento-de-uso-da-plataforma-na-modalidade-Software-as-a-Service-SAAS](https://suporte-medico.memed.com.br/hc/pt-br/articles/9419131744155-Condi%C3%A7%C3%B5es-gerais-de-licenciamento-de-uso-da-plataforma-na-modalidade-Software-as-a-Service-SAAS)  
+40. Alterações para a nova  4.00.01 e 4.01.00 \- Atlassian, acessado em dezembro 11, 2025, [https://solussaude.atlassian.net/wiki/spaces/CLIEN/pages/8693716](https://solussaude.atlassian.net/wiki/spaces/CLIEN/pages/8693716)  
+41. Padrão  \- Janeiro/2025 — Agência Nacional de Saúde Suplementar \- Portal Gov.br, acessado em dezembro 11, 2025, [https://www.gov.br/ans/pt-br/assuntos/prestadores/padrao-para-troca-de-informacao-de-saude-suplementar-2013-/padrao--janeiro-2025](https://www.gov.br/ans/pt-br/assuntos/prestadores/padrao-para-troca-de-informacao-de-saude-suplementar-2013-tiss/padrao-tiss-janeiro-2025)

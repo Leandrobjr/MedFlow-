@@ -1,0 +1,217 @@
+Agora você tem que decidir, por tabela: é global ou por clínica.
+
+Tabelas:
+
+expense_categories
+
+medical_addendums
+
+medical_fee_payments
+
+schedule_blocks
+
+schedule_configs
+
+staff_procedures
+
+tenants
+
+
+
+Caminho recomendado (prático e seguro)
+A) Se a tabela for “por clínica” → corrigir policy para filtrar por tenant
+
+Primeiro, checar se cada uma tem coluna tenant_id.
+
+👉 Onde rodar: Supabase → SQL Editor
+
+select table_name, column_name
+from information_schema.columns
+where table_schema='public'
+  and table_name in (
+    'expense_categories','medical_addendums','medical_fee_payments',
+    'schedule_blocks','schedule_configs','staff_procedures'
+  )
+  and column_name='tenant_id'
+order by table_name;
+
+Se aparecer tenant_id, aplique este patch (multi-tenant real)
+
+👉 Onde rodar: Supabase → SQL Editor
+
+-- Trocar policies "true/true" por isolamento por tenant_id
+
+drop policy if exists tenant_isolation_policy on public.expense_categories;
+create policy tenant_isolation_policy on public.expense_categories
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+drop policy if exists tenant_isolation_policy on public.medical_addendums;
+create policy tenant_isolation_policy on public.medical_addendums
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+drop policy if exists tenant_isolation_policy on public.medical_fee_payments;
+create policy tenant_isolation_policy on public.medical_fee_payments
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+drop policy if exists tenant_isolation_policy on public.schedule_blocks;
+create policy tenant_isolation_policy on public.schedule_blocks
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+drop policy if exists tenant_isolation_policy on public.schedule_configs;
+create policy tenant_isolation_policy on public.schedule_configs
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+drop policy if exists tenant_isolation_policy on public.staff_procedures;
+create policy tenant_isolation_policy on public.staff_procedures
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+B) Se a tabela for “global” → desligar RLS nela
+
+Isso vale para tabelas de catálogo/config global.
+
+👉 Onde rodar: Supabase → SQL Editor
+
+alter table public.expense_categories disable row level security;
+alter table public.schedule_configs disable row level security;
+
+
+(ajuste a lista conforme sua decisão)
+
+Caso especial: tenants
+
+Essa tabela não deve ser “liberada geral” em sistema multi-tenant.
+
+Duas abordagens comuns:
+
+Opção 1 (simples): cada usuário só vê o próprio tenant
+
+Se users tem tenant_id, então:
+
+drop policy if exists tenant_isolation_policy on public.tenants;
+
+create policy tenant_isolation_policy on public.tenants
+for select
+using (id = current_setting('medflow.current_tenant')::uuid);
+
+
+E não criar policy para INSERT/UPDATE/DELETE (deixa só admin/service_role fazer isso).
+
+Conclusão objetiva
+
+Hoje você tem 7 tabelas sem isolamento.
+Você precisa escolher:
+
+Se são “por clínica” → aplicar patch de policy por tenant_id
+
+Se são “globais” → desligar RLS nelas
+
+tenants → policy de SELECT restrita (não “true/true”)
+
+Se você me disser, para cada uma dessas 7, se é global ou por clínica, eu te devolvo o script final fechado (sem risco).
+
+Error: Failed to run sql query: ERROR: 42703: column "tenant_id" does not exist
+
+Diagnóstico direto: você tentou aplicar policy com tenant_id, mas nessa tabela específica não existe coluna tenant_id. Por isso o Postgres recusou.
+
+Agora você tem que escolher 1 de 2 caminhos para cada tabela que hoje está com qual=true:
+
+Caminho 1 (recomendado se for “por clínica”): criar tenant_id e depois criar a policy
+
+👉 Onde rodar: Supabase → SQL Editor
+
+1) Descobrir em qual tabela deu o erro (pra não chutar)
+
+Você rodou um script em lote; precisamos achar a(s) tabela(s) sem tenant_id.
+
+Rode:
+
+select
+  table_name,
+  exists (
+    select 1
+    from information_schema.columns c
+    where c.table_schema='public'
+      and c.table_name = t.table_name
+      and c.column_name='tenant_id'
+  ) as has_tenant_id
+from (values
+  ('expense_categories'),
+  ('medical_addendums'),
+  ('medical_fee_payments'),
+  ('schedule_blocks'),
+  ('schedule_configs'),
+  ('staff_procedures')
+) as t(table_name)
+order by table_name;
+
+
+✅ Isso te diz exatamente quais têm e quais não têm.
+
+2) Para as que NÃO têm tenant_id, criar a coluna
+
+Exemplo (faça para cada uma que veio has_tenant_id = false):
+
+alter table public.schedule_configs add column tenant_id uuid;
+
+3) Popular tenant_id (se já existem dados)
+
+Se a tabela está vazia, você pode pular.
+Se tem dados, você precisa definir para qual tenant vão. Exemplo (setando um tenant padrão):
+
+update public.schedule_configs
+set tenant_id = '<UUID_DO_TENANT_PADRAO>'
+where tenant_id is null;
+
+4) Tornar obrigatório e indexar
+alter table public.schedule_configs alter column tenant_id set not null;
+create index if not exists schedule_configs_tenant_id_idx on public.schedule_configs(tenant_id);
+
+5) Agora sim: criar policy isolando por tenant
+drop policy if exists tenant_isolation_policy on public.schedule_configs;
+
+create policy tenant_isolation_policy on public.schedule_configs
+for all
+using (tenant_id = current_setting('medflow.current_tenant')::uuid)
+with check (tenant_id = current_setting('medflow.current_tenant')::uuid);
+
+Caminho 2 (se for “global”): manter sem tenant e DESLIGAR RLS
+
+Se a tabela é catálogo/config global, não precisa tenant.
+
+👉 Onde rodar: Supabase → SQL Editor
+
+alter table public.schedule_configs disable row level security;
+drop policy if exists tenant_isolation_policy on public.schedule_configs;
+
+Importante: volte ao “estado seguro” rápido (evitar travar o app)
+
+Se você está com RLS ligado e policy “true/true”, o app não trava, mas não isola.
+Se você trocar e errar, pode gerar “permission denied”.
+
+Então a sequência correta é:
+
+Identificar tabelas sem tenant_id (query acima)
+
+Decidir global vs por clínica
+
+Só então alterar policies
+
+Me diga duas coisas (objetivo)
+
+Qual tabela exatamente deu o erro? (cole a linha do erro completa, se aparecer)
+
+Essas tabelas são por clínica ou globais?
+
+Se você rodar a query has_tenant_id e colar o resultado, eu te devolvo o SQL final pronto (um script único).

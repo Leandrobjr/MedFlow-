@@ -1,0 +1,202 @@
+Abaixo está o **playbook detalhado** (pronto pra colar no Cursor) para implementar minha recomendação **sem transação por request**, com **isolamento determinístico** via `withTenant()` (transação curta) e **refatoração mínima**.
+
+---
+
+## Objetivo (o que tem que ficar verdadeiro)
+
+1. Toda rota que acessa dado “tenantizado” roda **no banco** com `medflow.current_tenant` setado **na mesma transação/conexão** das queries.
+2. Você não precisa espalhar `req.db` no projeto.
+3. Você mantém `tenantId` manual por enquanto como “cinto e suspensório”, depois remove.
+
+---
+
+## Etapa 0 — Pré-check (não codar nada antes)
+
+**0.1 Confirmar RLS está “real”**
+
+* No Supabase, verifique que as policies das tabelas tenantizadas usam `current_setting('medflow.current_tenant')::uuid` (você já tem isso em várias tabelas).
+* Confirmar que `expense_categories` e tabelas “true/true” foram corrigidas (você já fez).
+
+**0.2 Confirmar resolução do tenant por Host já existe**
+
+* Pelo seu print, existe `TenantMiddleware` e ele resolve `tenantId` (ok).
+
+---
+
+## Etapa 1 — Criar um “TenantContextService” (estado por request)
+
+**1.1 Criar arquivo**
+`apps/api/src/common/tenant/tenant-context.service.ts`
+
+**1.2 Implementar (AsyncLocalStorage)**
+
+* Guardar `tenantId` do request num storage por request.
+* API:
+
+  * `run(tenantId, fn)`
+  * `getTenantId(): string | null`
+
+**Por quê:** assim qualquer lugar do código pega o tenant atual sem depender de `req`.
+
+---
+
+## Etapa 2 — Ajustar o TenantMiddleware para setar o TenantContext
+
+Arquivo que você já tem:
+`apps/api/src/common/middleware/tenant/tenant.middleware.ts`
+
+**2.1 No final da resolução (quando achou tenantId)**
+
+* Envolver `next()` com `tenantContext.run(tenantId, () => next())`
+* Continuar setando `req['tenantId'] = tenantId` (por compatibilidade)
+
+**2.2 Regras**
+
+* Se não houver tenantId: retorno 404 (como já faz) ou bypass em rotas públicas (se existir).
+
+---
+
+## Etapa 3 — Criar o `withTenant()` no PrismaService (núcleo da blindagem)
+
+Arquivo existente:
+`apps/api/src/prisma/prisma.service.ts`
+
+### 3.1 Adicionar método `withTenant`
+
+Assinatura:
+
+* `withTenant<T>(tenantId: string, fn: (tx: PrismaClient) => Promise<T>): Promise<T>`
+
+Comportamento:
+
+* Abre `this.$transaction(async (tx) => { ... })`
+* Dentro dela roda:
+
+  * `SELECT set_config('medflow.current_tenant', $1, true)` (com bind param)
+* Depois chama `return fn(tx)`
+
+**Importante (ponto crítico):**
+
+* Usar `set_config(..., true)` dentro da transação (equivale a “local”).
+* Usar `tx.$executeRaw`/`$executeRawUnsafe` com parâmetro (sem string concatenada).
+
+### 3.2 Ajustar `setTenantContext` existente (se já existir)
+
+Pelo relatório, vocês têm algo tipo `setTenantContext(tenantId)` que roda `SET LOCAL`.
+
+* Mantenha, mas reimplemente para ser chamado **dentro de transação** (ou marque como “interno” e use só no `withTenant`).
+
+---
+
+## Etapa 4 — Criar um “TenantPrisma” (helper de acesso)
+
+Criar:
+`apps/api/src/prisma/tenant-prisma.service.ts`
+
+Esse service vai:
+
+* Injetar `PrismaService` + `TenantContextService`
+* Expor:
+
+  * `run<T>(fn: (tx) => Promise<T>)`
+  * Ele pega `tenantId = tenantContext.getTenantId()`
+  * Se não tiver tenantId: throw (erro 500 com mensagem clara “Tenant não resolvido”)
+  * Se tiver: `return prisma.withTenant(tenantId, fn)`
+
+**Por quê:** você chama `tenantPrisma.run(...)` onde precisa, sem carregar tenantId na mão e sem espalhar req.
+
+---
+
+## Etapa 5 — Aplicar em pontos estratégicos (refatoração mínima e segura)
+
+Aqui é onde o Cursor vai mexer no menor número de lugares.
+
+### 5.1 Onde aplicar primeiro (ordem)
+
+1. Controllers/Services que fazem **múltiplas operações** no banco na mesma rota:
+
+   * create + relation
+   * update + audit log
+   * qualquer fluxo que faz `find` + `create` + `update` etc.
+2. Endpoints sensíveis (financeiro, prontuário).
+3. Depois: GETs simples (opcional).
+
+### 5.2 Padrão de uso
+
+Antes:
+
+* `return this.prisma.expenseCategory.findMany(...)`
+
+Depois:
+
+* `return this.tenantPrisma.run((tx) => tx.expenseCategory.findMany(...))`
+
+**Sem req.db**: o `tx` só existe dentro do callback.
+
+### 5.3 Regra objetiva
+
+* Se a rota faz **1 query** simples e hoje está estável: pode deixar por enquanto.
+* Se faz **2+ queries**: obrigatoriamente usar `tenantPrisma.run`.
+
+---
+
+## Etapa 6 — Garantir que RLS pega tudo “tenantizado” (teste real)
+
+### 6.1 Teste manual mínimo (2 tenants)
+
+1. Criar tenant A e tenant B (slugs diferentes).
+2. Inserir 1 registro em tabela tenantizada para cada tenant (ex: `patients`).
+3. Bater na API com Host do tenant A e listar patients: só aparece A.
+4. Repetir no Host do tenant B: só aparece B.
+
+### 6.2 Teste de segurança (negação)
+
+* Tentar acessar um ID do tenant B usando Host do tenant A:
+
+  * Resultado esperado: 404 ou vazio (dependendo da rota)
+  * Nunca pode retornar o dado.
+
+---
+
+## Etapa 7 — Telemetria (pra parar de “achar” e começar a “provar”)
+
+No `TenantMiddleware` (ou em um interceptor):
+
+* Logar por request:
+
+  * slug/host
+  * tenantId
+  * endpoint
+  * e se entrou em `tenantPrisma.run` (flag)
+
+No `PrismaService.withTenant`:
+
+* Logar “set_config aplicado” (debug) com requestId (se tiver).
+
+---
+
+## Etapa 8 — Hardening final (depois que estabilizar)
+
+1. Migrar gradualmente GETs para `tenantPrisma.run` (se quiser blindagem total)
+2. Remover “tenantId manual” das queries (opcional, fase 2)
+3. Travar lint/regra:
+
+   * pastas “tenantizadas” só podem usar `tenantPrisma.run`
+
+---
+
+# Mensagem pronta pro Cursor (cole isso)
+
+**Implementar isolamento multi-tenant determinístico no Nest+Prisma sem transação por request:**
+
+1. Criar `TenantContextService` com `AsyncLocalStorage` para guardar `tenantId` por request.
+2. Ajustar `TenantMiddleware` (`apps/api/src/common/middleware/tenant/tenant.middleware.ts`) para envolver `next()` com `tenantContext.run(tenantId, () => next())` e manter `req.tenantId`.
+3. No `PrismaService` (`apps/api/src/prisma/prisma.service.ts`) criar `withTenant(tenantId, fn)` que abre `this.$transaction(async (tx)=>{ await tx.$executeRaw\`select set_config('medflow.current_tenant', ${tenantId}, true)`; return fn(tx); })`.
+4. Criar `TenantPrismaService` (`apps/api/src/prisma/tenant-prisma.service.ts`) com `run(fn)` que lê `tenantId` do `TenantContextService` e chama `prisma.withTenant`.
+5. Refatorar endpoints com múltiplas queries para usar `tenantPrisma.run((tx)=> ...)` (priorizar mutations e fluxos críticos).
+6. Criar teste manual/automatizado com 2 tenants garantindo que Host A nunca lê dados do Host B.
+7. Adicionar logs de debug no `withTenant` e no middleware para rastrear tenantId por request.
+
+---
+
+Se você me disser **quais controllers** são mais críticos (financeiro/prontuário/agendamento), eu te digo exatamente **quais rotas** atacar primeiro para obter “blindagem” com o menor esforço.

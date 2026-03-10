@@ -92,20 +92,22 @@ export class FinanceController {
   @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.RECEPTIONIST)
   getBoxStatus(
     @Req() req: any,
-    @Query('date') date: string,
+    @Query('date') date?: string,
     @Query('userId') userId?: string,
   ) {
-    // Se userId foi passado, usa ele. Se não, não filtra (Admin/Owner veem tudo)
-    // O frontend é responsável por passar userId quando quiser filtrar por recepcionista
+    const today = new Date();
+    const dateStr =
+      date ||
+      `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
     return this.financeService.getBoxStatus(
       req.tenantId,
-      date,
+      dateStr,
       userId || undefined,
     );
   }
 
   @Post('boxes/receptionist/close')
-  @Roles(UserRole.RECEPTIONIST)
+  @Roles(UserRole.RECEPTIONIST, UserRole.ADMIN, UserRole.OWNER)
   closeReceptionistBox(@Req() req: any, @Body() dto: CloseReceptionistBoxDto) {
     if (!req.user?.id) {
       throw new BadRequestException('Usuário não identificado');

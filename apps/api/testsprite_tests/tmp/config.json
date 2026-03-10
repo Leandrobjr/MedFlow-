@@ -1,0 +1,21 @@
+{
+  "status": "init",
+  "scope": "codebase",
+  "type": "backend",
+  "localEndpoint": "http://localhost:3001/",
+  "tenantSlug": "medflow",
+  "loginUser": "admin@medflow.local",
+  "loginPassword": "admin123",
+  "executionArgs": {
+    "projectName": "api",
+    "projectPath": "D:\\Marco\\PROJETOS_IA\\MedFlow\\medflow-repo\\repo\\apps\\api",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-J2-00jwPENAZVrMsOGD-crf-rEZe5-OuXIx2xzg8cIjOHIWZkiW3tOj_QWD1CgTSWNl_RlY571YFDgmDLUDZ9CrvH5EKuhDkZvTifkMgs3uK6yeKJGG83jEqOM8TJe-Rxd4"
+    }
+  },
+  "serverPort": 59208,
+  "proxy": "http://b1709750-fee9-424d-94e5-0601fb9ec0df:XTpGpRYEixkXw5tYxuv8ng5saEKaxgyT@tun.testsprite.com:8080"
+}

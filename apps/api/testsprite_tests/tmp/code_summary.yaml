@@ -1,0 +1,170 @@
+version: "2"
+type: backend
+tech_stack:
+  - language: TypeScript
+  - framework: NestJS
+  - ui_library: none
+  - other:
+      - Prisma
+      - PostgreSQL (Supabase)
+      - JWT (cookies HttpOnly)
+      - PDFKit (reports)
+routes:
+  - path: /health
+    file: apps/api/src/app.controller.ts
+    auth_required: false
+    description: Healthcheck endpoint.
+  - path: /auth/login
+    file: apps/api/src/auth/auth.controller.ts
+    auth_required: false
+    description: Login, sets HttpOnly cookies for access/refresh.
+  - path: /auth/refresh
+    file: apps/api/src/auth/auth.controller.ts
+    auth_required: false
+    description: Refresh tokens and rotate cookies.
+  - path: /auth/me
+    file: apps/api/src/auth/auth.controller.ts
+    auth_required: true
+    description: Returns current JWT payload (user context).
+  - path: /auth/logout
+    file: apps/api/src/auth/auth.controller.ts
+    auth_required: false
+    description: Clears auth cookies.
+  - path: /appointments
+    file: apps/api/src/appointments/appointments.controller.ts
+    auth_required: true
+    description: Appointments CRUD and status updates.
+  - path: /patients
+    file: apps/api/src/patients/patients.controller.ts
+    auth_required: true
+    description: Patients CRUD.
+  - path: /staff
+    file: apps/api/src/staff/staff.controller.ts
+    auth_required: true
+    description: Staff/professionals CRUD and procedures linkage.
+  - path: /procedures
+    file: apps/api/src/procedures/procedures.controller.ts
+    auth_required: true
+    description: Procedures CRUD.
+  - path: /suppliers
+    file: apps/api/src/suppliers/suppliers.controller.ts
+    auth_required: true
+    description: Suppliers CRUD.
+  - path: /pep
+    file: apps/api/src/pep/pep.controller.ts
+    auth_required: true
+    description: Medical records (SOAP), finalize, addendums.
+  - path: /finance
+    file: apps/api/src/finance/finance.controller.ts
+    auth_required: true
+    description: Transactions, closures, boxes status/close, medical fees and payments.
+  - path: /reports
+    file: apps/api/src/reports/reports.controller.ts
+    auth_required: true
+    description: PDF report generation endpoints.
+  - path: /schedule
+    file: apps/api/src/schedule/schedule.controller.ts
+    auth_required: true
+    description: Schedule config and blocks management.
+  - path: /expense-categories
+    file: apps/api/src/expense-categories/expense-categories.controller.ts
+    auth_required: true
+    description: Expense categories tree and CRUD.
+features:
+  - name: Multi-tenant security (RLS + tenant context)
+    description: Enforces tenant isolation via tenant middleware and Prisma tenant context; supports RLS in DB.
+    files:
+      - apps/api/src/common/middleware/tenant.middleware.ts
+      - apps/api/src/prisma/tenant-prisma.service.ts
+      - packages/db/prisma/rls.sql
+    entry_route: /auth/login
+    user_interactions:
+      - Send requests with tenant context derived from x-tenant-slug or authenticated tenantId
+    api_calls:
+      - method: ANY
+        endpoint: /*
+    auth_required: true
+  - name: Auth with JWT cookies
+    description: Issues access/refresh tokens in HttpOnly cookies; includes staffId linkage in payload for doctors.
+    files:
+      - apps/api/src/auth/auth.controller.ts
+      - apps/api/src/auth/auth.service.ts
+      - apps/api/src/common/strategies/jwt.strategy.ts
+    entry_route: /auth/login
+    user_interactions:
+      - Login with email/password
+      - Use refresh cookie for session continuity
+      - Logout clears cookies
+    api_calls:
+      - method: POST
+        endpoint: /auth/login
+      - method: POST
+        endpoint: /auth/refresh
+      - method: GET
+        endpoint: /auth/me
+      - method: POST
+        endpoint: /auth/logout
+    auth_required: false
+  - name: Finance & Reports
+    description: Calculates daily balances by payment method, supports cashier closures, medical fee payments, and PDF reporting.
+    files:
+      - apps/api/src/finance/finance.service.ts
+      - apps/api/src/reports/reports.service.ts
+      - apps/api/src/reports/reports.controller.ts
+    entry_route: /finance/boxes/status
+    user_interactions:
+      - Create income/expense transactions
+      - Close receptionist/admin box and generate PDF closure report
+      - Close medical fee payment and generate PDF repasse report
+    api_calls:
+      - method: GET
+        endpoint: /finance/boxes/status
+      - method: POST
+        endpoint: /finance/boxes/receptionist/close
+      - method: POST
+        endpoint: /finance/boxes/admin/close
+      - method: POST
+        endpoint: /finance/medical-fees/close
+      - method: GET
+        endpoint: /reports/daily-closure/:closureId
+      - method: GET
+        endpoint: /reports/medical-fee/:paymentId
+    auth_required: true
+api_contracts:
+  POST /patients:
+    required: [name, cpf, phone, birthDate]
+    optional: [email, gender, address, city, state, zipCode]
+    note: "birthDate em YYYY-MM-DD. CPF único por tenant."
+  POST /appointments:
+    required: [patientId, staffId, startTime, endTime, procedureId]
+    optional: [type, observations]
+    note: "startTime/endTime em ISO8601. procedureId obrigatório."
+  POST /procedures:
+    required: [name, grossAmount]
+    optional: [observations]
+    note: "NÃO usar code, description, price. grossAmount >= 0."
+  POST /schedule/blocks:
+    required: [staffId, blockType, startDate]
+    optional: [endDate, startTime, endTime, reason, isRecurring]
+    note: "blockType: 'date' ou 'period'. startDate/endDate em YYYY-MM-DD."
+  POST /finance/transactions:
+    required: [type, category, amount]
+    optional: [method, description, patientId, staffId, appointmentId, categoryId]
+    note: "type: 'income' ou 'expense'."
+  POST /finance/boxes/receptionist/close:
+    required: [date, initialBalance, finalBalance]
+    optional: [cashCount, cardCount, pixCount, observations]
+    note: "date em YYYY-MM-DD. Roles: RECEPTIONIST, ADMIN, OWNER."
+  POST /finance/medical-fees/close:
+    required: [staffId, periodStart, periodEnd]
+    optional: [paymentMethod, observations]
+  POST /pep:
+    required: [appointmentId, patientId, staffId]
+    optional: [soapSubjective, soapObjective, soapAssessment, soapPlan, anamnesis, physicalExam, diagnosis, prescription, conduct]
+  POST /suppliers:
+    required: [name]
+    optional: [contactInfo]
+  PUT /patients/:id:
+    required: [name, cpf, phone, birthDate]
+    optional: [email, gender, address, city, state, zipCode]
+known_limitations: []

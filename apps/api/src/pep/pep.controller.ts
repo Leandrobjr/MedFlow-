@@ -53,7 +53,7 @@ export class PepController {
   }
 
   @Post(':id/finalize')
-  @Roles(UserRole.DOCTOR)
+  @Roles(UserRole.DOCTOR, UserRole.ADMIN, UserRole.OWNER)
   finalize(@Req() req: any, @Param('id') id: string) {
     return this.pepService.finalize(req.tenantId, id, {
       userId: req.user.sub,
@@ -63,7 +63,7 @@ export class PepController {
   }
 
   @Post(':id/addendum')
-  @Roles(UserRole.DOCTOR)
+  @Roles(UserRole.DOCTOR, UserRole.ADMIN, UserRole.OWNER)
   addAddendum(
     @Req() req: any,
     @Param('id') id: string,

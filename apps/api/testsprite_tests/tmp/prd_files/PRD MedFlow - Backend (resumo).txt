@@ -1,0 +1,36 @@
+PRD (resumo) - MedFlow API (NestJS)
+
+Objetivo:
+- API multi-tenant com isolamento por tenant (RLS/tenant context) para gestão clínica e financeira.
+
+Autenticação e sessão:
+- Login via POST /auth/login (email/senha) com cookies HttpOnly (access_token e refresh_token).
+- Refresh via POST /auth/refresh.
+- Logout via POST /auth/logout.
+- Contexto do usuário via GET /auth/me (inclui role e staffId quando aplicável).
+
+Requisitos de segurança (alto nível, OWASP):
+- Rotas protegidas por JWT + roles (ADMIN/OWNER/RECEPTIONIST/DOCTOR).
+- Não vazar dados entre tenants (RLS + tenantId).
+- Validar entrada (DTO + ValidationPipe).
+- Cookies: httpOnly; secure em produção; sameSite lax.
+
+Módulos principais:
+- Agenda: /appointments (CRUD + update status).
+- Pacientes: /patients (CRUD).
+- Equipe: /staff (CRUD + vincular procedimentos).
+- Procedimentos: /procedures (CRUD).
+- Fornecedores: /suppliers (CRUD).
+- PEP: /pep (prontuário SOAP, finalizar, adendos).
+- Financeiro:
+  - /finance/transactions (CRUD de lançamentos).
+  - /finance/boxes/status (saldos por método).
+  - /finance/boxes/receptionist/close e /finance/boxes/admin/close (fechamentos).
+  - /finance/medical-fees e /finance/medical-fees/close (repasses).
+- Relatórios (PDF): /reports/* (fechamento diário, faturamento, despesas, repasse).
+
+Critérios de aceitação (exemplos):
+- /auth/login retorna cookies e user com staffId quando houver vínculo.
+- /finance/boxes/status retorna income/expense por método (Dinheiro/PIX/Débito/Crédito) e não deve retornar dados de outros tenants.
+- /reports/daily-closure/:id gera PDF com datas corretas (BR) e extratificado por método.
+

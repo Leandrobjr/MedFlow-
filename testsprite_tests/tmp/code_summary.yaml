@@ -1,0 +1,277 @@
+version: "2"
+type: frontend
+tech_stack:
+  - language: TypeScript
+  - framework: Next.js (App Router)
+  - ui_library: Tailwind CSS
+  - other:
+      - React
+      - Axios
+      - React Hook Form
+      - React Query (@tanstack/react-query)
+      - date-fns
+      - lucide-react
+routes:
+  - path: /
+    file: apps/web/src/app/page.tsx
+    auth_required: false
+    description: Entry route; redirects to login or dashboard based on session.
+  - path: /login
+    file: apps/web/src/app/login/page.tsx
+    auth_required: false
+    description: User login (email/password) and session bootstrap.
+  - path: /dashboard
+    file: apps/web/src/app/dashboard/page.tsx
+    auth_required: true
+    description: Dashboard home (role-based).
+  - path: /dashboard/agenda
+    file: apps/web/src/app/dashboard/agenda/page.tsx
+    auth_required: true
+    description: Appointment calendar management (create/update/status/cancel).
+  - path: /dashboard/agenda/configuracao
+    file: apps/web/src/app/dashboard/agenda/configuracao/page.tsx
+    auth_required: true
+    description: Professional schedule configuration and blocks.
+  - path: /dashboard/pacientes
+    file: apps/web/src/app/dashboard/pacientes/page.tsx
+    auth_required: true
+    description: Patients CRUD.
+  - path: /dashboard/equipe
+    file: apps/web/src/app/dashboard/equipe/page.tsx
+    auth_required: true
+    description: Staff/Professionals CRUD (roles, commission, procedures linkage).
+  - path: /dashboard/cadastros/procedimentos
+    file: apps/web/src/app/dashboard/cadastros/procedimentos/page.tsx
+    auth_required: true
+    description: Procedures CRUD (pricing).
+  - path: /dashboard/cadastros/fornecedores
+    file: apps/web/src/app/dashboard/cadastros/fornecedores/page.tsx
+    auth_required: true
+    description: Suppliers CRUD.
+  - path: /dashboard/pep
+    file: apps/web/src/app/dashboard/pep/page.tsx
+    auth_required: true
+    description: Electronic medical record (SOAP + addendums + finalize).
+  - path: /dashboard/financeiro
+    file: apps/web/src/app/dashboard/financeiro/page.tsx
+    auth_required: true
+    description: "Cash flow: transactions, cashier closure, medical fee payments."
+  - path: /dashboard/financeiro/relatorios
+    file: apps/web/src/app/dashboard/financeiro/relatorios/page.tsx
+    auth_required: true
+    description: PDF reports generation (billing, closures, expenses, medical fees).
+  - path: /dashboard/financeiro/categorias
+    file: apps/web/src/app/dashboard/financeiro/categorias/page.tsx
+    auth_required: true
+    description: Expense categories management (tree, activate/deactivate).
+features:
+  - name: Authentication & Session
+    description: Login/logout and session restoration using HttpOnly cookies; loads current user and role/staffId.
+    files:
+      - apps/web/src/hooks/use-auth.tsx
+      - apps/web/src/lib/api.ts
+    entry_route: /login
+    user_interactions:
+      - Enter email and password
+      - Click "Entrar" to authenticate
+      - Navigate to dashboard routes after login
+      - Logout to clear session and return to login
+    api_calls:
+      - method: POST
+        endpoint: /auth/login
+      - method: GET
+        endpoint: /auth/me
+      - method: POST
+        endpoint: /auth/logout
+    auth_required: false
+  - name: Appointments (Agenda)
+    description: Create, list, update status, and delete appointments; supports filtering by professional and date.
+    files:
+      - apps/web/src/app/dashboard/agenda/page.tsx
+      - apps/web/src/services/appointment-service.ts
+    entry_route: /dashboard/agenda
+    user_interactions:
+      - Select professional and day/week/month view
+      - Create an appointment with patient/procedure/time
+      - Change appointment status (confirm/in progress/completed/canceled/no-show)
+      - Delete an appointment
+    api_calls:
+      - method: GET
+        endpoint: /appointments
+      - method: POST
+        endpoint: /appointments
+      - method: GET
+        endpoint: /appointments/:id
+      - method: PATCH
+        endpoint: /appointments/:id/status
+      - method: DELETE
+        endpoint: /appointments/:id
+    auth_required: true
+  - name: Schedule Config & Blocks
+    description: Configure weekly availability and create blocks (date/period) for each professional.
+    files:
+      - apps/web/src/app/dashboard/agenda/configuracao/page.tsx
+      - apps/web/src/services/schedule-service.ts
+    entry_route: /dashboard/agenda/configuracao
+    user_interactions:
+      - Enable/disable days of week and set periods
+      - Save schedule configuration
+      - Add a block (vacation/holiday/period)
+      - Edit or remove blocks
+    api_calls:
+      - method: POST
+        endpoint: /schedule/config
+      - method: GET
+        endpoint: /schedule/config/staff/:staffId
+      - method: PATCH
+        endpoint: /schedule/config/staff/:staffId
+      - method: POST
+        endpoint: /schedule/blocks
+      - method: GET
+        endpoint: /schedule/blocks/staff/:staffId
+      - method: PATCH
+        endpoint: /schedule/blocks/:blockId
+      - method: DELETE
+        endpoint: /schedule/blocks/:blockId
+    auth_required: true
+  - name: Patients, Staff, Procedures, Suppliers (Cadastros)
+    description: Core master-data CRUD for clinic operations, including staff-procedure linkage.
+    files:
+      - apps/web/src/app/dashboard/pacientes/page.tsx
+      - apps/web/src/app/dashboard/equipe/page.tsx
+      - apps/web/src/app/dashboard/cadastros/procedimentos/page.tsx
+      - apps/web/src/app/dashboard/cadastros/fornecedores/page.tsx
+      - apps/web/src/services/data-service.ts
+    entry_route: /dashboard/pacientes
+    user_interactions:
+      - Create/update/delete patients
+      - Create/update/delete staff (roles, commission rules)
+      - Create/update/delete procedures
+      - Create/update/delete suppliers
+    api_calls:
+      - method: GET
+        endpoint: /patients
+      - method: POST
+        endpoint: /patients
+      - method: PATCH
+        endpoint: /patients/:id
+      - method: DELETE
+        endpoint: /patients/:id
+      - method: GET
+        endpoint: /staff
+      - method: POST
+        endpoint: /staff
+      - method: PATCH
+        endpoint: /staff/:id
+      - method: DELETE
+        endpoint: /staff/:id
+      - method: GET
+        endpoint: /staff/:id/procedures
+      - method: GET
+        endpoint: /procedures
+      - method: POST
+        endpoint: /procedures
+      - method: PATCH
+        endpoint: /procedures/:id
+      - method: DELETE
+        endpoint: /procedures/:id
+      - method: GET
+        endpoint: /suppliers
+      - method: POST
+        endpoint: /suppliers
+      - method: PATCH
+        endpoint: /suppliers/:id
+      - method: DELETE
+        endpoint: /suppliers/:id
+    auth_required: true
+  - name: Electronic Medical Record (PEP)
+    description: Create/update/finalize medical records using SOAP fields; add addendums.
+    files:
+      - apps/web/src/app/dashboard/pep/page.tsx
+      - apps/web/src/services/pep-service.ts
+    entry_route: /dashboard/pep
+    user_interactions:
+      - Select patient and view medical record history
+      - Create a new medical record linked to an appointment
+      - Update SOAP fields and legacy fields
+      - Finalize the record
+      - Add an addendum
+    api_calls:
+      - method: GET
+        endpoint: /pep/patient/:patientId
+      - method: GET
+        endpoint: /pep/:id
+      - method: POST
+        endpoint: /pep
+      - method: PATCH
+        endpoint: /pep/:id
+      - method: POST
+        endpoint: /pep/:id/finalize
+      - method: POST
+        endpoint: /pep/:id/addendum
+    auth_required: true
+  - name: Finance (Transactions, Closures, Medical Fees) & Reports
+    description: Manage daily transactions, close receptionist/admin cash box, pay medical fees, and generate PDF reports.
+    files:
+      - apps/web/src/app/dashboard/financeiro/page.tsx
+      - apps/web/src/app/dashboard/financeiro/relatorios/page.tsx
+      - apps/web/src/app/dashboard/financeiro/categorias/page.tsx
+      - apps/web/src/services/finance-service.ts
+      - apps/web/src/services/reports-service.ts
+      - apps/web/src/services/expense-categories-service.ts
+    entry_route: /dashboard/financeiro
+    user_interactions:
+      - Add/update/delete income/expense transactions
+      - Close receptionist or admin cash box for a selected day
+      - Close medical fee payments and download repasse report
+      - Download/print reports (billing/closures/expenses)
+      - Manage expense categories (tree)
+    api_calls:
+      - method: GET
+        endpoint: /finance/transactions
+      - method: POST
+        endpoint: /finance/transactions
+      - method: PUT
+        endpoint: /finance/transactions/:id
+      - method: DELETE
+        endpoint: /finance/transactions/:id
+      - method: GET
+        endpoint: /finance/medical-fees
+      - method: GET
+        endpoint: /finance/medical-fees/payments
+      - method: POST
+        endpoint: /finance/medical-fees/close
+      - method: POST
+        endpoint: /finance/boxes/receptionist/close
+      - method: POST
+        endpoint: /finance/boxes/admin/close
+      - method: GET
+        endpoint: /finance/boxes/status
+      - method: GET
+        endpoint: /expense-categories
+      - method: GET
+        endpoint: /expense-categories/tree/hierarchical
+      - method: POST
+        endpoint: /expense-categories
+      - method: PATCH
+        endpoint: /expense-categories/:id
+      - method: DELETE
+        endpoint: /expense-categories/:id
+      - method: PATCH
+        endpoint: /expense-categories/:id/activate
+      - method: PATCH
+        endpoint: /expense-categories/:id/deactivate
+      - method: GET
+        endpoint: /reports/daily-closure/:closureId
+      - method: GET
+        endpoint: /reports/billing
+      - method: GET
+        endpoint: /reports/medical-fee/:paymentId
+      - method: GET
+        endpoint: /reports/medical-fee-pending
+      - method: GET
+        endpoint: /reports/expenses
+      - method: GET
+        endpoint: /reports/closures
+    auth_required: true
+known_limitations: []
